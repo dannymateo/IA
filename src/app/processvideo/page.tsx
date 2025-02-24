@@ -1,13 +1,22 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
 import {
-  Image as ImageIcon,
-  Download,
   Layers
 } from "lucide-react";
-import { Card, CardHeader, CardBody, Button, Input, Spinner, Slider } from "@nextui-org/react";
+import { Card, CardBody, Button, Spinner } from "@nextui-org/react";
 import { ImageProcessor } from '@/utils/imageProcessor';
+import { Header } from "@/components/processvideo/Header";
+import { StepsControl } from "@/components/processvideo";
+import { ProgressIndicator } from "@/components/processvideo";
+import { ResultsGrid } from "@/components/processvideo";
+import { FileUpload } from "@/components/processvideo/FileUpload";
+import { VideoResult } from "@/components/processvideo/VideoResult";
+import { ErrorMessage } from "@/components/processvideo/ErrorMessage";
 
+/**
+ * Componente principal para el procesamiento de video
+ * Permite cargar imágenes, procesarlas con K-means y generar videos
+ */
 export default function ProcessVideo() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [processedImages, setProcessedImages] = useState<string[]>([]);
@@ -20,45 +29,53 @@ export default function ProcessVideo() {
   const [stepsCount, setStepsCount] = useState(11);
   const [imageToProcess, setImageToProcess] = useState<string | null>(null);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  /**
+   * Maneja la carga de archivos, ya sea por input o drag & drop
+   */
+  const handleFileUpload = useCallback(async (file: File) => {
     setError("");
-    // Limpiar el video anterior
+    
     if (videoUrl) {
       URL.revokeObjectURL(videoUrl);
       setVideoUrl(null);
     }
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const imageUrl = e.target?.result as string;
-        setSelectedImage(imageUrl);
-        setImageToProcess(imageUrl);
-      };
-      reader.readAsDataURL(file);
+      const imageUrl = await readFileAsDataURL(file);
+      setSelectedImage(imageUrl);
+      setImageToProcess(imageUrl);
     } catch (e) {
       console.error('Error al cargar la imagen:', e);
       setError('Error al cargar la imagen: ' + (e instanceof Error ? e.message : 'Error desconocido'));
     }
+  }, [videoUrl]);
+
+  /**
+   * Convierte un archivo a Data URL
+   */
+  const readFileAsDataURL = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
+  /**
+   * Crea un video a partir de una secuencia de imágenes
+   */
   const createVideo = useCallback(async (images: string[]) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    const firstImage = new Image();
     
-    await new Promise((resolve) => {
-      firstImage.onload = resolve;
-      firstImage.src = images[0];
-    });
-
+    // Configurar dimensiones del canvas
+    const firstImage = await loadImage(images[0]);
     canvas.width = firstImage.width;
     canvas.height = firstImage.height;
 
-    const stream = canvas.captureStream(24);
+    // Configurar grabación
+    const stream = canvas.captureStream(30); // Aumentado a 30fps
     const mediaRecorder = new MediaRecorder(stream, {
       mimeType: 'video/webm',
       videoBitsPerSecond: 2500000
@@ -74,20 +91,27 @@ export default function ProcessVideo() {
 
     mediaRecorder.start();
 
-    const frameDelay = 150;
+    // Generar frames
+    const frameDelay = 100; // Reducido para animación más fluida
     for (const imageUrl of images) {
-      const img = new Image();
-      await new Promise((resolve) => {
-        img.onload = resolve;
-        img.src = imageUrl;
-      });
-      
+      const img = await loadImage(imageUrl);
       ctx.drawImage(img, 0, 0);
       await new Promise(resolve => setTimeout(resolve, frameDelay));
     }
 
     mediaRecorder.stop();
   }, []);
+
+  /**
+   * Carga una imagen y espera a que esté lista
+   */
+  const loadImage = (src: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.src = src;
+    });
+  };
 
   const processImage = async (imageUrl: string) => {
     const canvas = canvasRef.current;
@@ -163,7 +187,7 @@ export default function ProcessVideo() {
             files: files
           }
         } as unknown as React.ChangeEvent<HTMLInputElement>;
-        handleFileUpload(event);
+        handleFileUpload(file);
       } else {
         setError("Por favor, sube solo archivos de imagen");
       }
@@ -179,318 +203,57 @@ export default function ProcessVideo() {
 
       <div className="relative max-w-7xl mx-auto p-4 md:p-8 lg:p-12 space-y-8">
         <Card className="border border-slate-200/60 bg-white/95 backdrop-blur-2xl shadow-2xl">
-          <CardHeader className="flex flex-col gap-4 pt-6 md:pt-8">
-            <div className="flex items-center gap-2 w-full justify-between px-4 md:px-8">
-              <div className="flex items-center gap-4">
-                <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse" />
-                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse delay-100" />
-                <div className="w-3 h-3 rounded-full bg-sky-500 animate-pulse delay-200" />
-              </div>
-              <Layers className="text-indigo-600 w-8 h-8" />
-            </div>
-            <div className="text-center space-y-3 pb-2">
-              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#3b82f6] to-[#60a5fa] bg-clip-text text-transparent">
-                Procesador de Imagen por Niveles
-              </h1>
-            </div>
-          </CardHeader>
+          <Header />
 
           <CardBody className="space-y-10">
-            <Card className="bg-white border border-slate-200">
-              <CardHeader className="flex items-center gap-4 p-6 border-b border-slate-100">
-                <div className="p-3 bg-indigo-50 rounded-lg">
-                  <ImageIcon className="w-6 h-6 text-indigo-600" />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-lg font-medium text-slate-800">Cargar Imagen</h2>
-                  <p className="text-sm text-slate-500">Sube una imagen para procesar</p>
-                </div>
-              </CardHeader>
+            <FileUpload
+              onFileUpload={handleFileUpload}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            />
 
-              <CardBody className="p-6">
-                <div 
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop}
-                  className="w-full"
+            <StepsControl 
+              stepsCount={stepsCount}
+              setStepsCount={setStepsCount}
+            />
+
+            {imageToProcess && (
+              <div className="mt-6 flex justify-center">
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl transition-all duration-200 rounded-md"
+                  onPress={() => processImage(imageToProcess)}
+                  isDisabled={isLoading}
                 >
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    description="Arrastra y suelta tu imagen o haz clic para seleccionar"
-                    className="border border-dashed border-slate-200 hover:border-indigo-400 transition-all duration-200"
-                    classNames={{
-                      description: "text-slate-500 text-sm",
-                      input: "text-slate-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100",
-                      inputWrapper: "h-24 flex items-center justify-center bg-slate-50/50 cursor-pointer"
-                    }}
-                  />
-                </div>
-
-                <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl border border-indigo-100/50 shadow-inner">
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <h3 className="text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                          Control de Pasos
-                        </h3>
-                        <p className="text-sm text-slate-600">
-                          Ajusta la cantidad de niveles de color para el procesamiento
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm border border-slate-200">
-                        <Input
-                          type="number"
-                          value={stepsCount.toString()}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value);
-                            if (!isNaN(value)) {
-                              setStepsCount(Math.max(value, 2));
-                            }
-                          }}
-                          className="w-20"
-                          classNames={{
-                            input: "text-center font-medium text-indigo-600",
-                            inputWrapper: "bg-transparent shadow-none"
-                          }}
-                          size="sm"
-                          min={2}
-                        />
-                        <span className="text-sm text-slate-500">pasos</span>
-                      </div>
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Spinner color="white" size="sm" />
+                      <span>Procesando...</span>
                     </div>
-
-                    <div className="space-y-6">
-                      <Slider 
-                        size="lg"
-                        step={1}
-                        minValue={2}
-                        maxValue={100}
-                        value={stepsCount}
-                        onChange={(value) => setStepsCount(value as number)}
-                        className="max-w-full"
-                        color="secondary"
-                        showSteps={false}
-                        marks={[
-                          {
-                            value: 2,
-                            label: "Mínimo"
-                          },
-                          {
-                            value: 50,
-                            label: "Medio"
-                          },
-                          {
-                            value: 100,
-                            label: "Alto"
-                          }
-                        ]}
-                        startContent={
-                          <div className="flex flex-col items-center">
-                            <span className="text-xs font-medium text-indigo-600">2</span>
-                            <span className="text-[10px] text-slate-500">Min</span>
-                          </div>
-                        }
-                        endContent={
-                          <div className="flex flex-col items-center">
-                            <span className="text-xs font-medium text-indigo-600">100</span>
-                            <span className="text-[10px] text-slate-500">Max</span>
-                          </div>
-                        }
-                        classNames={{
-                          base: "max-w-full py-2",
-                          filler: "bg-gradient-to-r from-indigo-500 to-purple-500",
-                          thumb: [
-                            "transition-all duration-200",
-                            "before:bg-gradient-to-r before:from-indigo-500 before:to-purple-500",
-                            "after:bg-gradient-to-r after:from-indigo-500 after:to-purple-500",
-                            "shadow-lg hover:shadow-xl",
-                            "group-data-[focused=true]:shadow-lg",
-                          ].join(" "),
-                          track: "bg-slate-200",
-                          mark: "hidden",
-                          label: "font-medium text-slate-600"
-                        }}
-                      />
-
-                      <div className="grid grid-cols-3 gap-4">
-                        <Button
-                          size="sm"
-                          className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onPress={() => setStepsCount(20)}
-                        >
-                          <div className="flex flex-col items-center">
-                            <span className="text-sm font-medium text-slate-700">Rápido</span>
-                            <span className="text-xs text-slate-500">20 pasos</span>
-                          </div>
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onPress={() => setStepsCount(50)}
-                        >
-                          <div className="flex flex-col items-center">
-                            <span className="text-sm font-medium text-slate-700">Balanceado</span>
-                            <span className="text-xs text-slate-500">50 pasos</span>
-                          </div>
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onPress={() => setStepsCount(100)}
-                        >
-                          <div className="flex flex-col items-center">
-                            <span className="text-sm font-medium text-slate-700">Detallado</span>
-                            <span className="text-xs text-slate-500">100 pasos</span>
-                          </div>
-                        </Button>
-                      </div>
-
-                      {imageToProcess && (
-                        <div className="mt-6 flex justify-center">
-                          <Button
-                            size="lg"
-                            className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl transition-all duration-200 rounded-md"
-                            onPress={() => processImage(imageToProcess)}
-                            isDisabled={isLoading}
-                          >
-                            {isLoading ? (
-                              <div className="flex items-center gap-2">
-                                <Spinner color="white" size="sm" />
-                                <span>Procesando...</span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <Layers className="w-5 h-5" />
-                                <span>Procesar Imagen</span>
-                              </div>
-                            )}
-                          </Button>
-                        </div>
-                      )}
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-5 h-5" />
+                      <span>Procesar Imagen</span>
                     </div>
-                  </div>
-                </div>
-
-                {isLoading && (
-                  <Card className="mt-4 border-indigo-500/20 bg-gradient-to-br from-indigo-500/5 to-blue-400/5">
-                    <CardBody className="flex flex-col gap-4 items-center p-6">
-                      <div className="flex items-center gap-4">
-                        <Spinner color="primary" />
-                        <div className="flex flex-col">
-                          <p className="text-indigo-600 font-medium">
-                            Procesando imagen...
-                          </p>
-                          <p className="text-sm text-slate-600">
-                            Paso {progress.step} de {progress.total}
-                          </p>
-                          {currentCluster && (
-                            <p className="text-sm text-slate-600">
-                              Aplicando K-means con {currentCluster} clusters
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="w-full h-2 bg-indigo-100 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-indigo-500 transition-all duration-300"
-                          style={{ 
-                            width: `${(progress.step / progress.total) * 100}%`
-                          }}
-                        />
-                      </div>
-                    </CardBody>
-                  </Card>
-                )}
-              </CardBody>
-            </Card>
-
-            {error && (
-              <Card className="border-red-500/20 bg-gradient-to-br from-red-500/5 to-pink-400/5">
-                <CardBody className="flex gap-4 items-center p-6">
-                  <p className="text-red-400 font-medium">{error}</p>
-                </CardBody>
-              </Card>
+                  )}
+                </Button>
+              </div>
             )}
+
+            {isLoading && (
+              <ProgressIndicator 
+                progress={progress}
+                currentCluster={currentCluster}
+              />
+            )}
+
+            {error && <ErrorMessage message={error} />}
 
             {processedImages.length > 0 && (
-              <Card className="bg-white/95 backdrop-blur-xl border border-slate-200/60">
-                <CardHeader className="flex gap-4 px-6 pt-6">
-                  <h2 className="text-2xl font-medium text-slate-800">Resultados</h2>
-                </CardHeader>
-                <CardBody className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                  {processedImages.map((img, index) => {
-                    // Calcular el número de clusters para este paso
-                    const progress = index / (processedImages.length - 1);
-                    const minLog = Math.log(2);
-                    const maxLog = Math.log(64);
-                    const clusters = Math.round(Math.exp(minLog + (maxLog - minLog) * progress));
-
-                    return (
-                      <Card key={index} className="border border-slate-200 hover:border-indigo-400 transition-all duration-300">
-                        <CardHeader className="flex justify-between items-center p-4">
-                          <span className="text-slate-700 font-medium">
-                            Clusters: {clusters}
-                          </span>
-                          <Button
-                            size="sm"
-                            className="bg-indigo-50 text-indigo-600"
-                            onPress={() => {
-                              const link = document.createElement('a');
-                              link.href = img;
-                              link.download = `processed_${clusters}_clusters.png`;
-                              link.click();
-                            }}
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </CardHeader>
-                        <CardBody className="p-4">
-                          <img 
-                            src={img} 
-                            alt={`Processed ${clusters} clusters`} 
-                            className="w-full rounded-lg" 
-                          />
-                        </CardBody>
-                      </Card>
-                    );
-                  })}
-                </CardBody>
-              </Card>
+              <ResultsGrid processedImages={processedImages} />
             )}
 
-            {videoUrl && (
-              <Card className="bg-white/95 backdrop-blur-xl border border-slate-200/60">
-                <CardHeader className="flex justify-between items-center px-6 pt-6">
-                  <h2 className="text-2xl font-medium text-slate-800">Video Resultante</h2>
-                  <Button
-                    size="lg"
-                    className="bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-2 h-10"
-                    onPress={() => {
-                      const a = document.createElement('a');
-                      a.href = videoUrl;
-                      a.download = 'color-levels.webm';
-                      a.click();
-                    }}
-                  >
-                    <Download className="w-4 h-4" />
-                    Descargar
-                  </Button>
-                </CardHeader>
-                <CardBody className="p-6">
-                  <div className="aspect-video w-full relative rounded-lg overflow-hidden bg-slate-100">
-                    <video 
-                      src={videoUrl} 
-                      controls 
-                      className="w-full h-full"
-                      style={{ backgroundColor: 'black' }}
-                    >
-                      Tu navegador no soporta la reproducción de video.
-                    </video>
-                  </div>
-                </CardBody>
-              </Card>
-            )}
+            {videoUrl && <VideoResult videoUrl={videoUrl} />}
           </CardBody>
         </Card>
       </div>

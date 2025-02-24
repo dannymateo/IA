@@ -1,1 +1,1 @@
-export * from './knnModel';
+export { KNNModel } from './knnModel';
