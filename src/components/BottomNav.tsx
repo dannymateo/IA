@@ -1,5 +1,5 @@
 "use client";
-import { Brain, Layers } from "lucide-react";
+import { Brain, Github, Layers } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -7,7 +7,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-slate-200/60 shadow-lg z-50">
+    <div className="sticky bottom-0 bg-white/95 backdrop-blur-xl border-t border-slate-200/60 shadow-lg z-50">
       <div className="max-w-md mx-auto px-6 py-2">
         <div className="flex justify-around items-center">
           <Link 
@@ -35,6 +35,19 @@ export default function BottomNav() {
           </Link>
         </div>
       </div>
+      <footer className="w-full text-black py-3">
+          <div className="container mx-auto px-4 flex items-center justify-center gap-3 text-base font-medium">
+            <span>Desarrollado por Danny Hernández</span>
+            <a 
+              href="https://github.com/dannymateo/IA.git"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center hover:text-blue-600 transition-colors"
+            >
+              <Github size={24} />
+            </a>
+          </div>
+        </footer>      
     </div>
   );
 } 
