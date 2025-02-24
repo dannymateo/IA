@@ -201,33 +201,58 @@ export function Processvideo() {
     return (
       <div className="min-h-screen w-full bg-[#fafafa]">
         <canvas ref={canvasRef} style={{ display: 'none' }} />
+        
+        {/* Efectos de fondo */}
         <div className="absolute inset-0 bg-grid-slate-200/[0.03] bg-[size:24px_24px] pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#ffffff]" style={{ mixBlendMode: 'overlay' }} />
         <div className="absolute top-0 left-0 right-0 h-[600px] bg-gradient-to-r from-indigo-500/5 via-blue-500/5 to-sky-500/5 blur-[120px]" />
-  
-        <div className="relative max-w-7xl mx-auto p-4 md:p-8 lg:p-12 space-y-8">
+
+        {/* Contenedor principal con padding responsive */}
+        <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
           <Card className="border border-slate-200/60 bg-white/95 backdrop-blur-2xl shadow-2xl">
             <Header />
-  
-            <CardBody className="space-y-10">
-              <FileUpload
-                onFileUpload={handleFileUpload}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              />
-  
-              <StepsControl 
-                stepsCount={stepsCount}
-                setStepsCount={setStepsCount}
-                description="Número de pasos para el procesamiento de colores. 
+
+            <CardBody className="gap-6 px-4 sm:px-6 lg:px-8">
+              {/* Zona de carga de archivos */}
+              <div className="w-full max-w-3xl mx-auto">
+                <div className="space-y-4">
+                  <div className="text-center space-y-2">
+                    <h2 className="text-lg sm:text-xl md:text-2xl font-semibold 
+                                  bg-clip-text text-transparent 
+                                  bg-gradient-to-r from-indigo-600 to-purple-600
+                                  dark:from-indigo-400 dark:to-purple-400">
+                      Comienza tu proceso creativo
+                    </h2>
+                    <p className="text-xs sm:text-sm text-slate-600/90 dark:text-slate-400/90 
+                                  max-w-md mx-auto">
+                      Sube una imagen para transformarla en una secuencia de colores única
+                    </p>
+                  </div>
+                  <FileUpload
+                    onFileUpload={handleFileUpload}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                  />
+                </div>
+              </div>
+
+              {/* Control de pasos con diseño mejorado */}
+              <div className="w-full max-w-xl mx-auto">
+                <StepsControl 
+                  stepsCount={stepsCount}
+                  setStepsCount={setStepsCount}
+                  description="Número de pasos para el procesamiento de colores. 
                              Más pasos = mejor precisión, pero más tiempo de proceso."
-              />
-  
+                />
+              </div>
+
+              {/* Botón de procesamiento */}
               {imageToProcess && (
-                <div className="mt-6 flex justify-center">
+                <div className="flex justify-center mt-4">
                   <Button
                     size="lg"
-                    className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl transition-all duration-200 rounded-md"
+                    className="w-full sm:w-auto bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg 
+                             hover:shadow-xl transition-all duration-200 rounded-md px-8"
                     onPress={() => processImage(imageToProcess)}
                     isDisabled={isLoading}
                   >
@@ -245,21 +270,37 @@ export function Processvideo() {
                   </Button>
                 </div>
               )}
-  
+
+              {/* Indicador de progreso */}
               {isLoading && (
-                <ProgressIndicator 
-                  progress={progress}
-                  currentCluster={currentCluster}
-                />
+                <div className="w-full max-w-2xl mx-auto">
+                  <ProgressIndicator 
+                    progress={progress}
+                    currentCluster={currentCluster}
+                  />
+                </div>
               )}
-  
-              {error && <ErrorMessage message={error} />}
-  
+
+              {/* Mensaje de error */}
+              {error && (
+                <div className="w-full max-w-2xl mx-auto">
+                  <ErrorMessage message={error} />
+                </div>
+              )}
+
+              {/* Cuadrícula de resultados */}
               {processedImages.length > 0 && (
-                <ResultsGrid processedImages={processedImages} />
+                <div className="w-full">
+                  <ResultsGrid processedImages={processedImages} />
+                </div>
               )}
-  
-              {videoUrl && <VideoResult videoUrl={videoUrl} />}
+
+              {/* Resultado del video */}
+              {videoUrl && (
+                <div className="w-full max-w-4xl mx-auto">
+                  <VideoResult videoUrl={videoUrl} />
+                </div>
+              )}
             </CardBody>
           </Card>
         </div>

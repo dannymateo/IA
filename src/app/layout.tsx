@@ -4,6 +4,7 @@ import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import Loading from "@/components/Loading";
 import { Suspense } from "react";
+import { Github } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,6 +33,20 @@ export default function RootLayout({
           {children}
         </Suspense>
         <BottomNav />
+        
+        <footer className="fixed bottom-20 w-full text-black py-3">
+          <div className="container mx-auto px-4 flex items-center justify-center gap-3 text-base font-medium">
+            <span>Desarrollado por Danny Hernández</span>
+            <a 
+              href="https://github.com/dannymateo/IA.git"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center hover:text-blue-600 transition-colors"
+            >
+              <Github size={24} />
+            </a>
+          </div>
+        </footer>
       </body>
     </html>
   );
