@@ -1,4 +1,4 @@
-import { Processvideo } from "@/components/Processvideo";
+import { Processvideo } from "@/components/processvideo";
 
 export default function ImagesLayers() {
  
