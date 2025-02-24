@@ -23,9 +23,9 @@ export default function BottomNav() {
           </Link>
 
           <Link 
-            href="/processvideo" 
+            href="/imagesLayers" 
             className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all duration-300 ${
-              pathname === '/processvideo' 
+              pathname === '/imagesLayers' 
                 ? 'text-indigo-600 bg-indigo-50' 
                 : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
             }`}
