@@ -18,12 +18,12 @@ export default function ProcessVideo() {
   const [progress, setProgress] = useState({ step: 0, total: 50 });
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [stepsCount, setStepsCount] = useState(11);
+  const [imageToProcess, setImageToProcess] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsLoading(true);
     setError("");
     // Limpiar el video anterior
     if (videoUrl) {
@@ -36,14 +36,12 @@ export default function ProcessVideo() {
       reader.onload = async (e) => {
         const imageUrl = e.target?.result as string;
         setSelectedImage(imageUrl);
-        await processImage(imageUrl);
+        setImageToProcess(imageUrl);
       };
       reader.readAsDataURL(file);
     } catch (e) {
-      console.error('Error al procesar la imagen:', e);
-      setError('Error al procesar la imagen: ' + (e instanceof Error ? e.message : 'Error desconocido'));
-    } finally {
-      setIsLoading(false);
+      console.error('Error al cargar la imagen:', e);
+      setError('Error al cargar la imagen: ' + (e instanceof Error ? e.message : 'Error desconocido'));
     }
   };
 
@@ -98,8 +96,13 @@ export default function ProcessVideo() {
       return;
     }
 
+    // Limpiar estados previos
     setIsLoading(true);
     setProcessedImages([]);
+    setVideoUrl(null);
+    if (videoUrl) {
+      URL.revokeObjectURL(videoUrl);
+    }
     
     try {
       const img = new Image();
@@ -342,6 +345,29 @@ export default function ProcessVideo() {
                           </div>
                         </Button>
                       </div>
+
+                      {imageToProcess && (
+                        <div className="mt-6 flex justify-center">
+                          <Button
+                            size="lg"
+                            className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg hover:shadow-xl transition-all duration-200 rounded-md"
+                            onPress={() => processImage(imageToProcess)}
+                            isDisabled={isLoading}
+                          >
+                            {isLoading ? (
+                              <div className="flex items-center gap-2">
+                                <Spinner color="white" size="sm" />
+                                <span>Procesando...</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Layers className="w-5 h-5" />
+                                <span>Procesar Imagen</span>
+                              </div>
+                            )}
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

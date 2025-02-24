@@ -19,7 +19,7 @@ export default function BottomNav() {
             }`}
           >
             <Brain className="w-6 h-6" />
-            <span className="text-xs font-medium">Sistema Experto</span>
+            <span className="text-xs font-medium text-center">Sistema Experto</span>
           </Link>
 
           <Link 
@@ -31,7 +31,7 @@ export default function BottomNav() {
             }`}
           >
             <Layers className="w-6 h-6" />
-            <span className="text-xs font-medium">Procesador</span>
+            <span className="text-xs font-medium text-center">Procesador de imagenes</span>
           </Link>
         </div>
       </div>
