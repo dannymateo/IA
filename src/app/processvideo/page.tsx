@@ -242,7 +242,7 @@ export default function ProcessVideo() {
                           onChange={(e) => {
                             const value = parseInt(e.target.value);
                             if (!isNaN(value)) {
-                              setStepsCount(Math.min(Math.max(value, 2), 50));
+                              setStepsCount(Math.max(value, 2));
                             }
                           }}
                           className="w-20"
@@ -252,7 +252,6 @@ export default function ProcessVideo() {
                           }}
                           size="sm"
                           min={2}
-                          max={50}
                         />
                         <span className="text-sm text-slate-500">pasos</span>
                       </div>
@@ -263,7 +262,7 @@ export default function ProcessVideo() {
                         size="lg"
                         step={1}
                         minValue={2}
-                        maxValue={50}
+                        maxValue={100}
                         value={stepsCount}
                         onChange={(value) => setStepsCount(value as number)}
                         className="max-w-full"
@@ -275,12 +274,12 @@ export default function ProcessVideo() {
                             label: "Mínimo"
                           },
                           {
-                            value: 25,
+                            value: 50,
                             label: "Medio"
                           },
                           {
-                            value: 50,
-                            label: "Máximo"
+                            value: 100,
+                            label: "Alto"
                           }
                         ]}
                         startContent={
@@ -291,7 +290,7 @@ export default function ProcessVideo() {
                         }
                         endContent={
                           <div className="flex flex-col items-center">
-                            <span className="text-xs font-medium text-indigo-600">50</span>
+                            <span className="text-xs font-medium text-indigo-600">100</span>
                             <span className="text-[10px] text-slate-500">Max</span>
                           </div>
                         }
@@ -315,31 +314,31 @@ export default function ProcessVideo() {
                         <Button
                           size="sm"
                           className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onClick={() => setStepsCount(10)}
+                          onPress={() => setStepsCount(20)}
                         >
                           <div className="flex flex-col items-center">
                             <span className="text-sm font-medium text-slate-700">Rápido</span>
-                            <span className="text-xs text-slate-500">10 pasos</span>
+                            <span className="text-xs text-slate-500">20 pasos</span>
                           </div>
                         </Button>
                         <Button
                           size="sm"
                           className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onClick={() => setStepsCount(25)}
+                          onPress={() => setStepsCount(50)}
                         >
                           <div className="flex flex-col items-center">
                             <span className="text-sm font-medium text-slate-700">Balanceado</span>
-                            <span className="text-xs text-slate-500">25 pasos</span>
+                            <span className="text-xs text-slate-500">50 pasos</span>
                           </div>
                         </Button>
                         <Button
                           size="sm"
                           className="bg-white border border-slate-200 hover:bg-indigo-50 hover:border-indigo-200"
-                          onClick={() => setStepsCount(50)}
+                          onPress={() => setStepsCount(100)}
                         >
                           <div className="flex flex-col items-center">
                             <span className="text-sm font-medium text-slate-700">Detallado</span>
-                            <span className="text-xs text-slate-500">50 pasos</span>
+                            <span className="text-xs text-slate-500">100 pasos</span>
                           </div>
                         </Button>
                       </div>
@@ -410,7 +409,7 @@ export default function ProcessVideo() {
                           <Button
                             size="sm"
                             className="bg-indigo-50 text-indigo-600"
-                            onClick={() => {
+                            onPress={() => {
                               const link = document.createElement('a');
                               link.href = img;
                               link.download = `processed_${clusters}_clusters.png`;
@@ -439,9 +438,9 @@ export default function ProcessVideo() {
                 <CardHeader className="flex justify-between items-center px-6 pt-6">
                   <h2 className="text-2xl font-medium text-slate-800">Video Resultante</h2>
                   <Button
-                    size="sm"
-                    className="bg-indigo-50 text-indigo-600"
-                    onClick={() => {
+                    size="lg"
+                    className="bg-indigo-50 text-indigo-600 rounded-lg flex items-center gap-2 h-10"
+                    onPress={() => {
                       const a = document.createElement('a');
                       a.href = videoUrl;
                       a.download = 'color-levels.webm';
@@ -449,7 +448,7 @@ export default function ProcessVideo() {
                     }}
                   >
                     <Download className="w-4 h-4" />
-                    Descargar Video
+                    Descargar
                   </Button>
                 </CardHeader>
                 <CardBody className="p-6">
