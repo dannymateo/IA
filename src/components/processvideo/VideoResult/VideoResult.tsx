@@ -4,6 +4,19 @@ import { Download, Video } from "lucide-react";
 import { VideoResultProps } from "./types";
 
 export const VideoResult = ({ videoUrl }: VideoResultProps) => {
+  const handleDownload = () => {
+    try {
+      const a = document.createElement('a');
+      a.href = videoUrl;
+      a.download = 'color-levels.mp4';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error al descargar:', error);
+    }
+  };
+
   return (
     <Card className="bg-white/95 backdrop-blur-xl border border-slate-200/60 shadow-sm">
       <CardHeader className="flex justify-between items-center space-x-4 px-6 py-4">
@@ -15,12 +28,7 @@ export const VideoResult = ({ videoUrl }: VideoResultProps) => {
           size="md"
           variant="flat"
           className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-xl flex items-center gap-2 px-4 transition-colors duration-200"
-          onPress={() => {
-            const a = document.createElement('a');
-            a.href = videoUrl;
-            a.download = 'color-levels.webm';
-            a.click();
-          }}
+          onPress={handleDownload}
         >
           <Download className="w-4 h-4" />
           Descargar
@@ -31,9 +39,13 @@ export const VideoResult = ({ videoUrl }: VideoResultProps) => {
           <video 
             src={videoUrl} 
             controls 
+            playsInline
+            controlsList="nodownload"
             className="w-full h-full"
             style={{ backgroundColor: 'black' }}
           >
+            <source src={videoUrl} type="video/mp4" />
+            <source src={videoUrl} type="video/webm" />
             Tu navegador no soporta la reproducción de video.
           </video>
         </div>

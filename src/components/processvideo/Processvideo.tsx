@@ -77,34 +77,59 @@ export function Processvideo() {
       canvas.height = firstImage.height;
   
       const stream = canvas.captureStream(30);
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp9',
-        videoBitsPerSecond: 2000000
-      });
-  
-      const chunks: Blob[] = [];
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
       
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        if (videoUrl) URL.revokeObjectURL(videoUrl);
-        setVideoUrl(URL.createObjectURL(blob));
+      // Configurar opciones de codificación más compatibles
+      const options = {
+        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=h264') 
+          ? 'video/webm;codecs=h264'
+          : MediaRecorder.isTypeSupported('video/webm') 
+            ? 'video/webm'
+            : 'video/mp4',
+        videoBitsPerSecond: 2500000
       };
   
-      mediaRecorder.start();
+      try {
+        const mediaRecorder = new MediaRecorder(stream, options);
+        const chunks: Blob[] = [];
+        
+        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+        
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(chunks, { type: options.mimeType });
+          if (videoUrl) URL.revokeObjectURL(videoUrl);
+          setVideoUrl(URL.createObjectURL(blob));
+        };
   
-      const frameDelay = 66;
-      const processFrame = async (index: number) => {
-        if (index >= images.length) {
-          mediaRecorder.stop();
-          return;
-        }
-        const img = await loadImage(images[index]);
-        ctx.drawImage(img, 0, 0);
-        setTimeout(() => processFrame(index + 1), frameDelay);
-      };
+        mediaRecorder.start();
   
-      processFrame(0);
+        // Ajustar el frameDelay para dispositivos más lentos
+        const frameDelay = 100; // 10 FPS para mejor compatibilidad
+        let lastDrawTime = 0;
+  
+        const processFrame = async (index: number) => {
+          if (index >= images.length) {
+            mediaRecorder.stop();
+            return;
+          }
+  
+          const now = performance.now();
+          const timeSinceLastDraw = now - lastDrawTime;
+  
+          if (timeSinceLastDraw >= frameDelay) {
+            const img = await loadImage(images[index]);
+            ctx.drawImage(img, 0, 0);
+            lastDrawTime = now;
+            requestAnimationFrame(() => processFrame(index + 1));
+          } else {
+            setTimeout(() => processFrame(index), frameDelay - timeSinceLastDraw);
+          }
+        };
+  
+        processFrame(0);
+      } catch (error) {
+        console.error('Error al crear el video:', error);
+        setError('No se pudo crear el video. Intente con una imagen más pequeña.');
+      }
     }, [videoUrl]);
   
     /**
@@ -135,14 +160,16 @@ export function Processvideo() {
       try {
         const img = await loadImage(imageUrl);
         
-        const maxDimension = 1200;
+        // Reducir el tamaño máximo para dispositivos móviles
+        const maxDimension = window.innerWidth <= 768 ? 800 : 1200;
         const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-        canvas.width = img.width * scale;
-        canvas.height = img.height * scale;
+        canvas.width = Math.floor(img.width * scale);
+        canvas.height = Math.floor(img.height * scale);
         
         const ctx = canvas.getContext('2d', { 
           alpha: false,
-          willReadFrequently: true
+          willReadFrequently: true,
+          desynchronized: true // Mejor rendimiento en dispositivos móviles
         })!;
         
         ctx.imageSmoothingEnabled = true;
