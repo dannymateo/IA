@@ -1,38 +1,31 @@
 import * as tf from '@tensorflow/tfjs';
 import { KMeansResult, ProgressCallback } from './types';
+import { KMeansProcessor } from './kmeans';
 
 /**
  * Clase para procesar imágenes usando algoritmos de clustering K-means
+ * Implementa procesamiento progresivo de resolución de colores
  */
 export class ImageProcessor {
   /**
-   * Procesa una imagen aplicando K-means con diferentes niveles de clusters
+   * Procesa una imagen aplicando K-means con niveles progresivos de clusters
    * @param imageData - Datos de la imagen a procesar
    * @param width - Ancho de la imagen
-   * @param height - Alto de la imagen
-   * @param onProgress - Callback para reportar el progreso
-   * @param steps - Número de pasos/niveles a generar
+   * @param height - Alto de la imagen 
+   * @param onProgress - Callback para reportar progreso
+   * @param steps - Número de pasos/niveles a generar (default 50)
    * @returns Promise con array de URLs de imágenes procesadas
    */
   static async processImageWithKMeans(
-    imageData: ImageData, 
-    width: number, 
+    imageData: ImageData,
+    width: number,
     height: number,
     onProgress?: ProgressCallback,
-    steps: number = 11
+    steps: number = 50
   ): Promise<string[]> {
-    // Optimización: Pre-calcular longitud para evitar cálculos repetidos
-    const pixelCount = imageData.data.length / 4;
-    const pixels = new Float32Array(pixelCount * 3);
-    
-    // Convertir a RGB normalizado (0-1)
-    for (let i = 0; i < pixelCount; i++) {
-      const j = i * 4;
-      const k = i * 3;
-      pixels[k] = imageData.data[j] / 255;
-      pixels[k + 1] = imageData.data[j + 1] / 255;
-      pixels[k + 2] = imageData.data[j + 2] / 255;
-    }
+    // Convertir imagen a tensor de píxeles RGB normalizados
+    const pixels = ImageProcessor.normalizeImageData(imageData);
+    const tensorPixels = tf.tensor2d(pixels, [pixels.length / 3, 3]);
 
     // Configurar canvas una sola vez
     const canvas = document.createElement('canvas');
@@ -43,17 +36,15 @@ export class ImageProcessor {
     // Calcular niveles de clusters usando distribución logarítmica
     const clusterLevels = ImageProcessor.calculateClusterLevels(steps);
     const results: string[] = [];
-    
-    const tensorPixels = tf.tensor2d(pixels, [pixelCount, 3]);
-    
+
     try {
       for (let step = 0; step < clusterLevels.length; step++) {
         // Permitir actualizaciones del UI
         await ImageProcessor.yieldToMain();
-        
+
         const k = clusterLevels[step];
         onProgress?.(k, step + 1);
-        
+
         const processedImage = await ImageProcessor.processStep(
           tensorPixels,
           k,
@@ -61,11 +52,10 @@ export class ImageProcessor {
           height,
           ctx
         );
-        
+
         results.push(processedImage);
       }
     } finally {
-      // Limpieza de memoria
       tensorPixels.dispose();
     }
 
@@ -73,13 +63,32 @@ export class ImageProcessor {
   }
 
   /**
-   * Calcula los niveles de clusters usando una distribución logarítmica
+   * Normaliza los datos de la imagen a valores RGB entre 0-1
+   */
+  private static normalizeImageData(imageData: ImageData): Float32Array {
+    const pixelCount = imageData.data.length / 4;
+    const pixels = new Float32Array(pixelCount * 3);
+
+    for (let i = 0; i < pixelCount; i++) {
+      const j = i * 4;
+      const k = i * 3;
+      pixels[k] = imageData.data[j] / 255;     // R
+      pixels[k + 1] = imageData.data[j + 1] / 255; // G 
+      pixels[k + 2] = imageData.data[j + 2] / 255; // B
+    }
+
+    return pixels;
+  }
+
+  /**
+   * Calcula niveles de clusters usando distribución logarítmica
+   * para mejor progresión visual
    */
   private static calculateClusterLevels(steps: number): number[] {
     return Array.from({ length: steps }, (_, i) => {
       const progress = i / (steps - 1);
-      const minLog = Math.log(2);
-      const maxLog = Math.log(64);
+      const minLog = Math.log(2);  // Mínimo 2 clusters
+      const maxLog = Math.log(64); // Máximo 64 clusters
       const value = Math.exp(minLog + (maxLog - minLog) * progress);
       return Math.max(2, Math.round(value));
     }).filter((value, index, self) => self.indexOf(value) === index);
@@ -213,5 +222,43 @@ export class ImageProcessor {
     return Math.sqrt(
       a.reduce((sum, val, i) => sum + Math.pow(val - b[i], 2), 0)
     );
+  }
+
+  async processImage(imageData: ImageData, clusters: number): Promise<ImageData> {
+    const width = imageData.width;
+    const height = imageData.height;
+    const pixels = imageData.data;
+    
+    // Convertir datos de imagen a matriz de características RGB
+    const features: number[][] = [];
+    for (let i = 0; i < pixels.length; i += 4) {
+      features.push([
+        pixels[i],     // R
+        pixels[i + 1], // G
+        pixels[i + 2]  // B
+      ]);
+    }
+
+    // Aplicar K-means
+    const kmeans = new KMeansProcessor(clusters);
+    kmeans.fit(features);
+    
+    // Obtener centroides (colores representativos)
+    const centroids = kmeans.getCentroids();
+    
+    // Asignar cada pixel al centroide más cercano
+    const labels = kmeans.predict(features);
+
+    // Crear nueva imagen con colores cuantizados
+    const newImageData = new ImageData(width, height);
+    labels.forEach((label, i) => {
+      const pixelIndex = i * 4;
+      newImageData.data[pixelIndex] = Math.round(centroids[label][0]);     // R
+      newImageData.data[pixelIndex + 1] = Math.round(centroids[label][1]); // G
+      newImageData.data[pixelIndex + 2] = Math.round(centroids[label][2]); // B
+      newImageData.data[pixelIndex + 3] = pixels[pixelIndex + 3];          // A
+    });
+
+    return newImageData;
   }
 } 

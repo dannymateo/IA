@@ -2,7 +2,7 @@ import { Button, Input, Slider } from "@nextui-org/react";
 
 import { StepsControlProps } from "./types";
 
-export const StepsControl = ({ stepsCount, setStepsCount }: StepsControlProps) => {
+export const StepsControl = ({ stepsCount, setStepsCount, description }: StepsControlProps) => {
   return (
     <div className="mt-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-xl border border-indigo-100/50 shadow-inner">
       <div className="space-y-6">
@@ -122,6 +122,7 @@ export const StepsControl = ({ stepsCount, setStepsCount }: StepsControlProps) =
               </div>
             </Button>
           </div>
+          <p className="text-sm text-slate-600 text-center">{description}</p>
         </div>
       </div>
     </div>
