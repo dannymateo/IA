@@ -10,34 +10,6 @@ import { Questionnaire } from "./Questionnaire";
 import { KnowledgeBaseUpload } from "./KnowledgeBaseUpload";
 import { ErrorDisplay } from "./ErrorDisplay";
 
-/**
- * @component ExpertSystem
- * @description Sistema experto que permite cargar una base de conocimiento en formato Excel,
- * realizar preguntas al usuario y generar recomendaciones basadas en las respuestas.
- * 
- * El componente maneja:
- * - Carga de archivos Excel mediante drag & drop o selección manual
- * - Validación de respuestas
- * - Comunicación con un servidor backend para procesar la lógica del sistema experto
- * - Visualización de recomendaciones
- * - Manejo de errores
- * 
- * @state
- * - answers: Registro de respuestas (true/false) indexadas por ID de pregunta
- * - questions: Array de preguntas cargadas desde el archivo Excel
- * - recommendation: Recomendación generada por el sistema
- * - error: Mensaje de error si algo falla
- * - isLoading: Estado de carga durante operaciones asícronas
- * - sessionId: ID de sesión proporcionado por el backend
- * 
- * @functions
- * - handleFileUpload: Procesa la carga del archivo Excel al servidor
- * - handleDragOver: Maneja el evento de arrastrar archivo
- * - handleDrop: Procesa el archivo soltado en la zona de drop
- * - handleSubmit: Envía las respuestas al servidor y obtiene recomendación
- * - handleDownloadTemplate: Permite descargar la plantilla Excel
- */
-
 export function ExpertSystem() {
     const [answers, setAnswers] = useState<Record<number, boolean>>({});
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -45,20 +17,16 @@ export function ExpertSystem() {
     const [error, setError] = useState<string>("");
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const API_BASE_URL = 'http://191.91.240.39';
     const [sessionId, setSessionId] = useState<string | null>(null);
   
-    /**
-     * @function handleFileUpload
-     * @param {File} file - Archivo Excel a procesar
-     * @description Envía el archivo al servidor, procesa la respuesta y actualiza el estado
-     */
     const handleFileUpload = async (file: File) => {
       setIsLoading(true);
       const formData = new FormData();
       formData.append('file', file);
   
       try {
-        const response = await fetch('http://191.91.240.39/upload/', {
+        const response = await fetch(`${API_BASE_URL}/upload/`, {
           method: 'POST',
           body: formData,
         });
@@ -131,7 +99,7 @@ export function ExpertSystem() {
         // Convertir las respuestas al formato que espera el backend
         const answersArray = questions.map(q => answers[q.id] ? 1 : 0);
         
-        const response = await fetch(`http://191.91.240.39/predict/${sessionId}`, {
+        const response = await fetch(`${API_BASE_URL}/predict/${sessionId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -248,16 +216,3 @@ export function ExpertSystem() {
       </div>
     );
   }
-
-/**
- * El componente utiliza una interfaz moderna con:
- * - Efectos de degradado y blur para el fondo
- * - Animaciones suaves
- * - Diseño responsivo
- * - Tarjetas con efecto glassmorphism
- * - Indicadores de carga animados
- * 
- * Se comunica con endpoints:
- * - POST http://191.91.240.39/upload/ - Para cargar el archivo Excel
- * - POST http://191.91.240.39/predict/${sessionId} - Para obtener recomendaciones
- */
