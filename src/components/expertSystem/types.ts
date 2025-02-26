@@ -1,6 +1,9 @@
-interface Question {
-    id: string;
+export interface Question {
+    id: number;
     text: string;
 }
 
-export type { Question };
+export interface Answer {
+    questionId: number;
+    value: boolean;
+}

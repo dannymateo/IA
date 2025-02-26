@@ -1,4 +1,3 @@
-
 "use client";
 import { CardBody, Divider } from "@nextui-org/react";
 import { CardHeader } from "@nextui-org/react";
@@ -10,14 +9,12 @@ import { Question } from "./types";
 import { Questionnaire } from "./Questionnaire";
 import { KnowledgeBaseUpload } from "./KnowledgeBaseUpload";
 import { ErrorDisplay } from "./ErrorDisplay";
-import { KNNModel } from "./utils";
 
 export function ExpertSystem() {
-    const [answers, setAnswers] = useState<Record<string, boolean>>({});
+    const [answers, setAnswers] = useState<Record<number, boolean>>({});
     const [questions, setQuestions] = useState<Question[]>([]);
     const [recommendation, setRecommendation] = useState<string>("");
     const [error, setError] = useState<string>("");
-    const [knnModel, setKnnModel] = useState<KNNModel>(new KNNModel());
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -27,7 +24,7 @@ export function ExpertSystem() {
       formData.append('file', file);
   
       try {
-        const response = await fetch('/api/upload', {
+        const response = await fetch('http://191.91.240.39/upload/', {
           method: 'POST',
           body: formData,
         });
@@ -39,17 +36,19 @@ export function ExpertSystem() {
   
         const data = await response.json();
         
-        if (!data.questions || !data.trainingData) {
+        if (!data.questions) {
           throw new Error('Formato de datos inválido');
         }
+
+        // Convertir las preguntas al formato correcto
+        const formattedQuestions: Question[] = data.questions.map((text: string, index: number) => ({
+          id: index,
+          text: text
+        }));
   
-        setQuestions(data.questions);
-        
-        const model = new KNNModel();
-        model.train(data.trainingData);
-        setKnnModel(model);
-        setError("");
+        setQuestions(formattedQuestions);
         setAnswers({});
+        setError("");
       } catch (e) {
         console.error('Error al cargar el archivo:', e);
         setError('Error al cargar la base de conocimiento: ' + (e instanceof Error ? e.message : 'Error desconocido'));
@@ -79,38 +78,38 @@ export function ExpertSystem() {
       }
     };
   
-    const determineArchitecture = (answers: Record<string, boolean>) => {
-      try {
-        if (questions.length === 0) {
-          throw new Error('No hay preguntas cargadas');
-        }
-  
-        const unansweredQuestions = questions.filter(q => answers[q.id] === undefined);
-        if (unansweredQuestions.length > 0) {
-          throw new Error('Por favor responda todas las preguntas');
-        }
-  
-        const features = questions.map(q => answers[q.id] ? 1 : 0);
-        const result = knnModel.predict(features);
-        
-        if (!result) {
-          throw new Error('No se pudo determinar una recomendación');
-        }
-  
-        return result;
-      } catch (e) {
-        console.error('Error al predecir:', e);
-        setError(e instanceof Error ? e.message : 'Error al determinar la respuesta');
-        return null;
-      }
-    };
-  
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      const result = determineArchitecture(answers);
-      if (result) {
-        setRecommendation(result);
-        setError("");
+      setIsLoading(true);
+      
+      try {
+        // Convertir las respuestas al formato que espera el backend
+        const answersArray = questions.map(q => answers[q.id] ? 1 : 0);
+        
+        const response = await fetch('http://191.91.240.39/predict/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(answersArray),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Error al obtener la predicción');
+        }
+
+        const result = await response.json();
+        if (result.decision) {
+          setRecommendation(result.decision);
+          setError("");
+        } else if (result.error) {
+          throw new Error(result.error);
+        }
+      } catch (e) {
+        setError('Error al obtener la recomendación: ' + (e instanceof Error ? e.message : 'Error desconocido'));
+      } finally {
+        setIsLoading(false);
       }
     };
   

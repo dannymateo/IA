@@ -1,16 +1,12 @@
 import { Card, CardHeader, CardBody, Button } from "@nextui-org/react";
 import { CheckCircle2, Check, X, Send } from "lucide-react";
 import React from 'react';
-
-interface Question {
-    id: string; // Asegúrate de que cada pregunta tenga un ID único
-    text: string; // El texto de la pregunta
-}
+import { Question } from '../types';
 
 interface QuestionnaireProps {
-    questions: Question[]; // Cambia esto si es necesario
-    answers: Record<string, boolean>;
-    setAnswers: (answers: Record<string, boolean>) => void;
+    questions: Question[];
+    answers: Record<number, boolean>;
+    setAnswers: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
     onSubmit: (e: React.FormEvent) => void;
 }
 
@@ -38,7 +34,7 @@ export function Questionnaire({
                 <form onSubmit={onSubmit} className="space-y-5">
                     {questions.map((question) => (
                         <div 
-                            key={question.id} // Asegúrate de usar el ID único
+                            key={question.id}
                             className="p-5 rounded-2xl border border-slate-200 hover:border-blue-200 hover:bg-blue-50/30 transition-all duration-200"
                         >
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
@@ -52,7 +48,7 @@ export function Questionnaire({
                                                 ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                                                 : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
                                         } min-w-[90px] px-4 py-2.5 rounded-xl flex items-center gap-2 justify-center transition-all duration-200`}
-                                        onClick={() => setAnswers({ ...answers, [question.id]: true })} // Cambia onPress a onClick
+                                        onClick={() => setAnswers({ ...answers, [question.id]: true })}
                                     >
                                         <Check className="w-4 h-4" />
                                         <span>Sí</span>
@@ -65,7 +61,7 @@ export function Questionnaire({
                                                 ? 'bg-rose-50 text-rose-600 border border-rose-200'
                                                 : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
                                         } min-w-[90px] px-4 py-2.5 rounded-xl flex items-center gap-2 justify-center transition-all duration-200`}
-                                        onClick={() => setAnswers({ ...answers, [question.id]: false })} // Cambia onPress a onClick
+                                        onClick={() => setAnswers({ ...answers, [question.id]: false })}
                                     >
                                         <X className="w-4 h-4" />
                                         <span>No</span>
