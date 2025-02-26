@@ -17,7 +17,7 @@ export function ExpertSystem() {
     const [error, setError] = useState<string>("");
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const API_BASE_URL = 'http://191.91.240.39';
+    const API_BASE_URL = 'https://dasscoin.zapto.org';
     const [sessionId, setSessionId] = useState<string | null>(null);
   
     const handleFileUpload = async (file: File) => {

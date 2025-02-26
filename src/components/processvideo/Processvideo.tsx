@@ -23,7 +23,7 @@ export function Processvideo() {
     const [imageToProcess, setImageToProcess] = useState<string | null>(null);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [isComplete, setIsComplete] = useState(false);
-    const API_BASE_URL = 'http://191.91.240.39';
+    const API_BASE_URL = 'https://dasscoin.zapto.org';
     const [originalFile, setOriginalFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
   
