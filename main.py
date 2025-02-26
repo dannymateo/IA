@@ -15,7 +15,12 @@ from datetime import datetime, timedelta
 import asyncio
 import threading
 import logging
-import time
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 
 # Configurar logging
 logging.basicConfig(
@@ -46,8 +51,7 @@ class SessionData:
         self.created_at = datetime.now()
         self.session_type = session_type  # 'excel' o 'image'
         # Para sistema experto
-        self.modelo_knn = None
-        self.label_encoder = None
+        self.modelos = None
         # Para procesamiento de imágenes
         self.processed_images = []
 
@@ -75,9 +79,9 @@ async def startup_event():
 def cargar_datos_desde_excel(archivo_excel):
     try:
         if isinstance(archivo_excel, bytes):
-            df = pd.read_excel(io.BytesIO(archivo_excel))
+            df = pd.read_csv(io.BytesIO(archivo_excel))
         else:
-            df = pd.read_excel(archivo_excel)
+            df = pd.read_csv(archivo_excel)
         
         df.columns = df.columns.str.strip()
         
@@ -86,7 +90,7 @@ def cargar_datos_desde_excel(archivo_excel):
         
         return df
     except Exception as e:
-        logger.error(f"Error al cargar el archivo Excel: {e}")
+        logger.error(f"Error al cargar el archivo: {e}")
         return None
 
 def entrenar_modelo_knn(df):
@@ -94,22 +98,36 @@ def entrenar_modelo_knn(df):
         X = df.iloc[:, :-1]
         y = df.iloc[:, -1]
         
-        modelo_knn = KNeighborsClassifier(n_neighbors=3)
-        label_encoder = LabelEncoder()
-        y_encoded = label_encoder.fit_transform(y)
+        # División de datos en entrenamiento y prueba
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1, random_state=751)
         
-        modelo_knn.fit(X, y_encoded)
+        # Para mejorar la escala de los datos
+        scaler = MinMaxScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
         
-        return modelo_knn, label_encoder
+        modelos = {
+            'knn': KNeighborsClassifier(n_neighbors=3),
+            'bayes': GaussianNB(),
+            'lda': LinearDiscriminantAnalysis(),
+            'qda': QuadraticDiscriminantAnalysis(),
+            'tree': DecisionTreeClassifier(),
+            'svm': SVC()
+        }
+        
+        accuracies = {}
+        for nombre, modelo in modelos.items():
+            modelo.fit(X_train, y_train)
+            accuracies[nombre] = float(modelo.score(X_test, y_test))
+        
+        return modelos, accuracies, scaler
     except Exception as e:
-        logger.error(f"Error al entrenar el modelo: {e}")
-        return None, None
+        logger.error(f"Error al entrenar los modelos: {e}")
+        return None, None, None
 
 # Funciones de procesamiento de imágenes
 def process_single_kmeans(args):
-    # ... Mantener la función existente ...
     dataset, k, shape = args
-    start_time = time.time()
     logger.info(f"Iniciando clustering con k={k}")
     
     try:
@@ -136,8 +154,6 @@ def process_single_kmeans(args):
         raise
 
 def process_image_with_kmeans(image_array: np.ndarray, n_clusters: int) -> List[str]:
-    # ... Mantener la función existente ...
-    start_time = time.time()
     logger.info(f"Iniciando procesamiento de imagen con {n_clusters} clusters")
     
     try:
@@ -191,7 +207,7 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/predict/{session_id}")
-async def predict(session_id: str, respuestas: List[int]):
+async def predict(session_id: str, respuestas: List[float]):
     try:
         with session_lock:
             session = session_data.get(session_id)
@@ -202,17 +218,35 @@ async def predict(session_id: str, respuestas: List[int]):
         if df is None:
             raise HTTPException(status_code=400, detail="Error al cargar los datos")
             
-        if session.modelo_knn is None or session.label_encoder is None:
-            modelo_knn, label_encoder = entrenar_modelo_knn(df)
-            if modelo_knn is None:
-                raise HTTPException(status_code=500, detail="Error al entrenar el modelo")
-            session.modelo_knn = modelo_knn
-            session.label_encoder = label_encoder
+        if not hasattr(session, 'modelos') or session.modelos is None:
+            modelos, accuracies, scaler = entrenar_modelo_knn(df)
+            if modelos is None:
+                raise HTTPException(status_code=500, detail="Error al entrenar los modelos")
+            session.modelos = modelos
+            session.accuracies = accuracies
+            session.scaler = scaler
         
-        prediccion_encoded = session.modelo_knn.predict([respuestas])
-        prediccion = session.label_encoder.inverse_transform(prediccion_encoded)
+        # Normalizar los datos de entrada
+        respuestas_norm = session.scaler.transform([respuestas])
         
-        return {"decision": prediccion[0]}
+        # Realizar predicciones con todos los modelos
+        predicciones = {}
+        for nombre, modelo in session.modelos.items():
+            pred_valor = int(modelo.predict(respuestas_norm)[0])
+            predicciones[nombre] = {
+                "mensaje": "Posible caso de diabetes" if pred_valor == 1 else "No se detecta diabetes",
+                "valor": pred_valor,
+                "accuracy": session.accuracies[nombre]
+            }
+        
+        # Tomar la decisión por mayoría
+        votos_positivos = sum(1 for pred in predicciones.values() if pred["valor"] == 1)
+        prediccion_final = "Posible caso de diabetes" if votos_positivos > len(predicciones)/2 else "No se detecta diabetes"
+        
+        return {
+            "decision": prediccion_final,
+            "predicciones_por_modelo": predicciones
+        }
     except HTTPException as he:
         raise he
     except Exception as e:
