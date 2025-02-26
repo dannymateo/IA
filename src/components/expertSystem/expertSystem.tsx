@@ -10,6 +10,34 @@ import { Questionnaire } from "./Questionnaire";
 import { KnowledgeBaseUpload } from "./KnowledgeBaseUpload";
 import { ErrorDisplay } from "./ErrorDisplay";
 
+/**
+ * @component ExpertSystem
+ * @description Sistema experto que permite cargar una base de conocimiento en formato Excel,
+ * realizar preguntas al usuario y generar recomendaciones basadas en las respuestas.
+ * 
+ * El componente maneja:
+ * - Carga de archivos Excel mediante drag & drop o selección manual
+ * - Validación de respuestas
+ * - Comunicación con un servidor backend para procesar la lógica del sistema experto
+ * - Visualización de recomendaciones
+ * - Manejo de errores
+ * 
+ * @state
+ * - answers: Registro de respuestas (true/false) indexadas por ID de pregunta
+ * - questions: Array de preguntas cargadas desde el archivo Excel
+ * - recommendation: Recomendación generada por el sistema
+ * - error: Mensaje de error si algo falla
+ * - isLoading: Estado de carga durante operaciones asícronas
+ * - sessionId: ID de sesión proporcionado por el backend
+ * 
+ * @functions
+ * - handleFileUpload: Procesa la carga del archivo Excel al servidor
+ * - handleDragOver: Maneja el evento de arrastrar archivo
+ * - handleDrop: Procesa el archivo soltado en la zona de drop
+ * - handleSubmit: Envía las respuestas al servidor y obtiene recomendación
+ * - handleDownloadTemplate: Permite descargar la plantilla Excel
+ */
+
 export function ExpertSystem() {
     const [answers, setAnswers] = useState<Record<number, boolean>>({});
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -17,7 +45,13 @@ export function ExpertSystem() {
     const [error, setError] = useState<string>("");
     const [isLoading, setIsLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [sessionId, setSessionId] = useState<string | null>(null);
   
+    /**
+     * @function handleFileUpload
+     * @param {File} file - Archivo Excel a procesar
+     * @description Envía el archivo al servidor, procesa la respuesta y actualiza el estado
+     */
     const handleFileUpload = async (file: File) => {
       setIsLoading(true);
       const formData = new FormData();
@@ -31,12 +65,12 @@ export function ExpertSystem() {
   
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.message || 'Error al cargar el archivo');
+          throw new Error(errorData.detail || 'Error al cargar el archivo');
         }
   
         const data = await response.json();
         
-        if (!data.questions) {
+        if (!data.questions || !data.session_id) {
           throw new Error('Formato de datos inválido');
         }
 
@@ -46,6 +80,7 @@ export function ExpertSystem() {
           text: text
         }));
   
+        setSessionId(data.session_id);
         setQuestions(formattedQuestions);
         setAnswers({});
         setError("");
@@ -78,15 +113,25 @@ export function ExpertSystem() {
       }
     };
   
+    /**
+     * @function handleSubmit
+     * @param {React.FormEvent} e - Evento del formulario
+     * @description Envía las respuestas al servidor y obtiene la recomendación
+     */
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!sessionId) {
+        setError('No hay una sesión activa');
+        return;
+      }
+      
       setIsLoading(true);
       
       try {
         // Convertir las respuestas al formato que espera el backend
         const answersArray = questions.map(q => answers[q.id] ? 1 : 0);
         
-        const response = await fetch('http://191.91.240.39/predict/', {
+        const response = await fetch(`http://191.91.240.39/predict/${sessionId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -96,15 +141,15 @@ export function ExpertSystem() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Error al obtener la predicción');
+          throw new Error(errorData.detail || 'Error al obtener la predicción');
         }
 
         const result = await response.json();
         if (result.decision) {
           setRecommendation(result.decision);
           setError("");
-        } else if (result.error) {
-          throw new Error(result.error);
+        } else {
+          throw new Error('No se recibió una decisión válida');
         }
       } catch (e) {
         setError('Error al obtener la recomendación: ' + (e instanceof Error ? e.message : 'Error desconocido'));
@@ -203,3 +248,16 @@ export function ExpertSystem() {
       </div>
     );
   }
+
+/**
+ * El componente utiliza una interfaz moderna con:
+ * - Efectos de degradado y blur para el fondo
+ * - Animaciones suaves
+ * - Diseño responsivo
+ * - Tarjetas con efecto glassmorphism
+ * - Indicadores de carga animados
+ * 
+ * Se comunica con endpoints:
+ * - POST http://191.91.240.39/upload/ - Para cargar el archivo Excel
+ * - POST http://191.91.240.39/predict/${sessionId} - Para obtener recomendaciones
+ */

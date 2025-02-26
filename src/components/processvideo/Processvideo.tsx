@@ -13,11 +13,27 @@ import { VideoResult } from "./VideoResult";
 import { ResultsGrid } from "./ResultsGrid";
 import { FileUpload } from "@/components/fileUpload";
 import { StepsControl } from "./StepsControl";
-import { ImageProcessor } from "./utils";
 
 /**
- * Componente principal para el procesamiento de video
- * Permite cargar imágenes, procesarlas con K-means y generar videos
+ * @component Processvideo
+ * @description Componente principal para el procesamiento de imágenes y generación de videos
+ * Este componente permite:
+ * - Cargar imágenes mediante drag & drop o selección de archivo
+ * - Procesar imágenes usando un algoritmo de agrupamiento por pasos
+ * - Generar un video a partir de la secuencia de imágenes procesadas
+ * - Visualizar los resultados intermedios y finales
+ * 
+ * @state
+ * - selectedImage: Almacena la imagen seleccionada en formato Data URL
+ * - processedImages: Array de imágenes procesadas en cada paso
+ * - isLoading: Indica si hay un proceso en curso
+ * - currentCluster: Número del cluster actual siendo procesado
+ * - error: Mensaje de error si algo falla
+ * - progress: Objeto que indica el progreso del procesamiento
+ * - videoUrl: URL del video generado
+ * - stepsCount: Número de pasos para el procesamiento
+ * - imageToProcess: Imagen actual a procesar
+ * - sessionId: Identificador único de la sesión de procesamiento
  */
 export function Processvideo() {
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -30,12 +46,17 @@ export function Processvideo() {
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [stepsCount, setStepsCount] = useState(11);
     const [imageToProcess, setImageToProcess] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(null);
   
     /**
-     * Maneja la carga de archivos, ya sea por input o drag & drop
+     * @function handleFileUpload
+     * @description Maneja la carga de archivos, ya sea por input o drag & drop
+     * @param {File} file - Archivo de imagen a procesar
+     * @throws {Error} Si hay problemas al cargar la imagen
      */
     const handleFileUpload = useCallback(async (file: File) => {
       setError("");
+      setIsLoading(true);
       
       if (videoUrl) {
         URL.revokeObjectURL(videoUrl);
@@ -43,17 +64,41 @@ export function Processvideo() {
       }
   
       try {
+        // Crear FormData para enviar el archivo
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Actualizar URL al endpoint correcto
+        const response = await fetch('http://191.91.240.39/upload-image/', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Error al cargar la imagen');
+        }
+
+        const data = await response.json();
+        setSessionId(data.session_id);
+
+        // Mostrar preview de la imagen
         const imageUrl = await readFileAsDataURL(file);
         setSelectedImage(imageUrl);
         setImageToProcess(imageUrl);
       } catch (e) {
         console.error('Error al cargar la imagen:', e);
         setError('Error al cargar la imagen: ' + (e instanceof Error ? e.message : 'Error desconocido'));
+      } finally {
+        setIsLoading(false);
       }
     }, [videoUrl]);
   
     /**
-     * Convierte un archivo a Data URL
+     * @function readFileAsDataURL
+     * @description Convierte un archivo a formato Data URL
+     * @param {File} file - Archivo a convertir
+     * @returns {Promise<string>} Data URL del archivo
      */
     const readFileAsDataURL = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
@@ -65,7 +110,10 @@ export function Processvideo() {
     };
   
     /**
-     * Crea un video a partir de una secuencia de imágenes
+     * @function createVideo
+     * @description Genera un video a partir de una secuencia de imágenes
+     * @param {string[]} images - Array de imágenes en formato Data URL
+     * @throws {Error} Si hay problemas al crear el video
      */
     const createVideo = useCallback(async (images: string[]) => {
       const canvas = document.createElement('canvas');
@@ -132,7 +180,10 @@ export function Processvideo() {
     }, [videoUrl]);
   
     /**
-     * Carga una imagen y espera a que esté lista
+     * @function loadImage
+     * @description Carga una imagen y espera a que esté lista para usar
+     * @param {string} src - URL o Data URL de la imagen
+     * @returns {Promise<HTMLImageElement>} Elemento imagen cargado
      */
     const loadImage = (src: string): Promise<HTMLImageElement> => {
       return new Promise((resolve) => {
@@ -142,54 +193,38 @@ export function Processvideo() {
       });
     };
   
+    /**
+     * @function processImage
+     * @description Procesa la imagen utilizando el servidor backend
+     * @param {string} imageUrl - URL de la imagen a procesar
+     * @throws {Error} Si hay problemas durante el procesamiento
+     */
     const processImage = async (imageUrl: string) => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        setError('Error: No se pudo inicializar el canvas');
+      if (!sessionId) {
+        setError('No hay una sesión activa');
         return;
       }
-  
+
       setIsLoading(true);
       setProcessedImages([]);
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-        setVideoUrl(null);
-      }
       
       try {
-        const img = await loadImage(imageUrl);
-        
-        // Reducir el tamaño máximo para dispositivos móviles
-        const maxDimension = window.innerWidth <= 768 ? 800 : 1200;
-        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-        canvas.width = Math.floor(img.width * scale);
-        canvas.height = Math.floor(img.height * scale);
-        
-        const ctx = canvas.getContext('2d', { 
-          alpha: false,
-          willReadFrequently: true,
-          desynchronized: true // Mejor rendimiento en dispositivos móviles
-        })!;
-        
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        const results = await ImageProcessor.processImageWithKMeans(
-          imageData, 
-          canvas.width, 
-          canvas.height,
-          (cluster, step) => {
-            setCurrentCluster(cluster);
-            setProgress({ step, total: stepsCount });
-          },
-          Math.min(stepsCount, 20)
-        );
-        
-        setProcessedImages(results);
-        await createVideo(results);
+        // Actualizar URL al endpoint correcto y enviar steps como query parameter
+        const response = await fetch(`http://191.91.240.39/process-image/${sessionId}?steps=${stepsCount}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Error al procesar la imagen');
+        }
+
+        const data = await response.json();
+        setProcessedImages(data.images);
+        await createVideo(data.images);
         
       } catch (error) {
         setError('Error al procesar la imagen: ' + (error instanceof Error ? error.message : 'Error desconocido'));
@@ -199,11 +234,21 @@ export function Processvideo() {
       }
     };
   
+    /**
+     * @function handleDragOver
+     * @description Maneja el evento de arrastrar sobre la zona de drop
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de arrastre
+     */
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
     };
   
+    /**
+     * @function handleDrop
+     * @description Maneja el evento de soltar un archivo en la zona de drop
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de drop
+     */
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
