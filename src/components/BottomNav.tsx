@@ -1,5 +1,5 @@
 "use client";
-import { Code2, Github, Layers, Stethoscope } from "lucide-react";
+import { Brain, Github, Layers } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -18,8 +18,8 @@ export default function BottomNav() {
                 : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
             }`}
           >
-            <Code2 className="w-6 h-6" />
-            <span className="text-xs font-medium text-center">Arquitectura Software</span>
+            <Brain className="w-6 h-6" />
+            <span className="text-xs font-medium text-center">Sistema Experto</span>
           </Link>
 
           <Link 
@@ -34,7 +34,7 @@ export default function BottomNav() {
             <span className="text-xs font-medium text-center">Procesador de imagenes</span>
           </Link>
 
-          <Link 
+          {/* <Link 
             href="/diabetes" 
             className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all duration-300 ${
               pathname === '/diabetes' 
@@ -42,9 +42,9 @@ export default function BottomNav() {
                 : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
             }`}
           >
-            <Stethoscope className="w-6 h-6" />
-            <span className="text-xs font-medium text-center">Diagnóstico Diabetes</span>
-          </Link>
+            <Brain className="w-6 h-6" />
+            <span className="text-xs font-medium text-center">Sistema Experto</span>
+          </Link> */}
         </div>
       </div>
       <footer className="w-full text-black py-3">

@@ -10,19 +10,11 @@
   },
   "dependencies": {
     "@nextui-org/react": "^2.6.11",
-    "@tensorflow/tfjs": "^4.22.0",
-    "@types/csv-parse": "^1.2.5",
-    "chart.js": "^4.4.8",
-    "csv-parse": "^5.6.0",
     "framer-motion": "^12.4.7",
     "lucide-react": "^0.475.0",
-    "ml-knn": "^3.0.0",
     "next": "15.1.7",
-    "papaparse": "^5.5.2",
     "react": "^19.0.0",
-    "react-chartjs-2": "^5.3.0",
-    "react-dom": "^19.0.0",
-    "xlsx": "^0.18.5"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
