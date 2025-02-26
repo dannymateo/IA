@@ -1,12 +1,8 @@
 import { Upload, Image as ImageIcon } from "lucide-react";
 
-interface FileUploadProps {
-  onFileUpload: (file: File) => void;
-  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-}
+import { FileUploadProps } from "./types";
 
-export function FileUpload({ onFileUpload, onDragOver, onDrop }: FileUploadProps) {
+export function FileUpload({ onFileUpload, onDragOver, onDrop, title, formats, formatsName }: FileUploadProps) {
   return (
     <div className="w-full">
       <div
@@ -21,7 +17,7 @@ export function FileUpload({ onFileUpload, onDragOver, onDrop }: FileUploadProps
       >
         <input
           type="file"
-          accept="image/*"
+          accept={formats.join(",")}
           onChange={(e) => e.target.files?.[0] && onFileUpload(e.target.files[0])}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
           aria-label="Cargar imagen"
@@ -39,7 +35,7 @@ export function FileUpload({ onFileUpload, onDragOver, onDrop }: FileUploadProps
                          text-slate-800/90 dark:text-slate-200/90
                          transition-colors group-hover:text-indigo-600 
                          dark:group-hover:text-indigo-400">
-              Sube tu imagen aquí
+              {title}
             </h3>
             <p className="text-xs sm:text-sm text-slate-600/90 dark:text-slate-400/90
                         max-w-xs mx-auto">
@@ -52,16 +48,16 @@ export function FileUpload({ onFileUpload, onDragOver, onDrop }: FileUploadProps
                 <ImageIcon className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span>Formatos soportados:</span>
               </div>
-              <span className="font-medium">PNG, JPG, GIF</span>
+              <span className="font-medium">{formatsName.join(", ")}</span>
             </div>
           </div>
         </div>
 
         {/* Efecto de hover mejorado */}
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/5 to-purple-50/5 
-                      dark:from-indigo-900/5 dark:to-purple-900/5
-                      rounded-2xl opacity-0 group-hover:opacity-100 
-                      transition-all duration-500 ease-in-out pointer-events-none" />
+            dark:from-indigo-900/5 dark:to-purple-900/5
+            rounded-2xl opacity-0 group-hover:opacity-100 
+            transition-all duration-500 ease-in-out pointer-events-none" />
       </div>
     </div>
   );

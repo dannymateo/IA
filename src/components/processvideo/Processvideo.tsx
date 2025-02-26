@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Spinner } from "@nextui-org/react";
+import { Button, CardHeader, Spinner } from "@nextui-org/react";
 import { Card, CardBody } from "@nextui-org/react";
 import { useCallback } from "react";
 import { useState } from "react";
@@ -11,8 +11,7 @@ import { ProgressIndicator } from "./ProgressIndicator";
 import { ErrorMessage } from "./ErrorMessage";
 import { VideoResult } from "./VideoResult";
 import { ResultsGrid } from "./ResultsGrid";
-import { Header } from "./Header";
-import { FileUpload } from "./FileUpload";
+import { FileUpload } from "@/components/fileUpload";
 import { StepsControl } from "./StepsControl";
 import { ImageProcessor } from "./utils";
 
@@ -237,8 +236,21 @@ export function Processvideo() {
         {/* Contenedor principal con padding responsive */}
         <div className="relative w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
           <Card className="border border-slate-200/60 bg-white/95 backdrop-blur-2xl shadow-2xl">
-            <Header />
-
+            <CardHeader className="flex flex-col gap-4 pt-6 md:pt-8">
+              <div className="flex items-center gap-2 w-full justify-between px-4 md:px-8">
+                <div className="flex items-center gap-4">
+                  <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse" />
+                  <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse delay-100" />
+                  <div className="w-3 h-3 rounded-full bg-sky-500 animate-pulse delay-200" />
+                </div>
+                <Layers className="text-indigo-600 w-8 h-8" />
+              </div>
+              <div className="text-center space-y-3 pb-2">
+                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#3b82f6] to-[#60a5fa] bg-clip-text text-transparent">
+                  Procesador de Imagen por Niveles
+                </h1>
+              </div>
+            </CardHeader>
             <CardBody className="gap-6 px-4 sm:px-6 lg:px-8">
               {/* Zona de carga de archivos */}
               <div className="w-full max-w-3xl mx-auto">
@@ -256,6 +268,9 @@ export function Processvideo() {
                     </p>
                   </div>
                   <FileUpload
+                    title="Sube una imagen para transformarla en una secuencia de colores única"
+                    formats={["image/png", "image/jpeg", "image/jpg", "image/webp"]}
+                    formatsName={["PNG", "JPEG", "JPG", "WEBP"]}
                     onFileUpload={handleFileUpload}
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
@@ -275,11 +290,12 @@ export function Processvideo() {
 
               {/* Botón de procesamiento */}
               {imageToProcess && (
-                <div className="flex justify-center mt-4">
+                <div className="flex justify-center mt-4 max-w-xl mx-auto">
                   <Button
                     size="lg"
-                    className="w-full sm:w-auto bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg 
-                             hover:shadow-xl transition-all duration-200 rounded-md px-8"
+                    className="w-full mt-8 bg-blue-50 text-blue-600 border border-blue-200 py-4 rounded-xl
+                    hover:bg-blue-100 transition-all duration-300 flex items-center justify-center gap-3 
+                    disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
                     onPress={() => processImage(imageToProcess)}
                     isDisabled={isLoading}
                   >
