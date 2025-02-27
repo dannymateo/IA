@@ -18,8 +18,8 @@ export function KnowledgeBaseUpload({
           <FileSpreadsheet className="w-6 h-6 text-indigo-600" />
         </div>
         <div className="flex-1">
-          <h2 className="text-lg font-medium text-slate-800">Base de Conocimiento</h2>
-          <p className="text-sm text-slate-500">Carga tu archivo Excel</p>
+          <h2 className="text-lg font-medium text-slate-800">Base de Datos</h2>
+          <p className="text-sm text-slate-500">Carga tu archivo CSV o Excel</p>
         </div>
         <Button
           onPress={handleDownloadTemplate}

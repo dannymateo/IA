@@ -1,35 +1,69 @@
 "use client";
+
 import { CardBody, Divider } from "@nextui-org/react";
 import { CardHeader } from "@nextui-org/react";
 import { useState } from "react";
 import { Brain, FileSpreadsheet } from "lucide-react";
 import { Card } from "@nextui-org/react";
 
-import { FileUpload } from "@/components/fileUpload";
 import { DataInput } from "./DataInput";
 import { ErrorDisplay } from "../expertSystem/ErrorDisplay";
-import { KnowledgeBaseUpload } from "../expertSystem/KnowledgeBaseUpload/KnowledgeBaseUpload";
+import { KnowledgeBaseUpload } from "../expertSystem/KnowledgeBaseUpload";
 
+/**
+ * @fileoverview Sistema de clasificación que utiliza múltiples modelos de machine learning
+ * para predecir la posibilidad de diabetes basado en respuestas del usuario.
+ */
+
+/**
+ * @interface Question
+ * @description Representa una pregunta en el sistema
+ * @property {number} id - Identificador único de la pregunta
+ * @property {string} text - Texto de la pregunta
+ */
 interface Question {
   id: number;
   text: string;
 }
 
+/**
+ * @interface ModelPrediction
+ * @description Representa la predicción de un modelo individual
+ * @property {string} mensaje - Mensaje descriptivo del resultado
+ * @property {number} valor - Valor numérico de la predicción (0 o 1)
+ * @property {number} accuracy - Precisión del modelo (0-1)
+ */
 interface ModelPrediction {
   mensaje: string;
   valor: number;
   accuracy: number;
 }
 
+/**
+ * @interface ModelPredictions
+ * @description Mapa de predicciones por modelo
+ * @property {ModelPrediction} [key: string] - Predicción para cada modelo
+ */
 interface ModelPredictions {
   [key: string]: ModelPrediction;
 }
 
+/**
+ * @interface PredictionResponse
+ * @description Respuesta completa de predicción del servidor
+ * @property {string} decision - Decisión final basada en todos los modelos
+ * @property {ModelPredictions} predicciones_por_modelo - Predicciones individuales por modelo
+ */
 interface PredictionResponse {
   decision: string;
   predicciones_por_modelo: ModelPredictions;
 }
 
+/**
+ * @function ClassifierSystem
+ * @description Componente principal del sistema de clasificación
+ * @returns {JSX.Element} Interfaz del sistema de clasificación
+ */
 export function ClassifierSystem() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<number[]>([]);
@@ -40,16 +74,38 @@ export function ClassifierSystem() {
   const [modelPredictions, setModelPredictions] = useState<ModelPredictions | null>(null);
   const API_BASE_URL = 'https://dasscoin.zapto.org';
 
+  /**
+   * @function handleFileUpload
+   * @description Maneja la carga de archivos CSV o Excel
+   * @param {File} file - Archivo a procesar
+   * @returns {Promise<void>}
+   * @throws {Error} Si hay un error en la carga o procesamiento del archivo
+   */
   const handleFileUpload = async (file: File) => {
     setIsLoading(true);
     setError("");
     setPrediction("");
     
+    // Validar el tipo de archivo - CSV y Excel para clasificador
+    const validTypes = [
+      "text/csv",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/csv"
+    ];
+
+    if (!validTypes.includes(file.type)) {
+      setError("Por favor, sube solo archivos CSV o Excel (.csv, .xlsx, .xls)");
+      setIsLoading(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/upload/`, {
+      // Endpoint específico para el clasificador
+      const response = await fetch(`${API_BASE_URL}/classifier/upload/`, {
         method: 'POST',
         body: formData,
       });
@@ -72,7 +128,7 @@ export function ClassifierSystem() {
 
       setSessionId(data.session_id);
       setQuestions(formattedQuestions);
-      setAnswers(new Array(formattedQuestions.length).fill(0));
+      setAnswers(new Array(formattedQuestions.length).fill(null));
       
     } catch (e) {
       console.error('Error al cargar el archivo:', e);
@@ -82,6 +138,12 @@ export function ClassifierSystem() {
     }
   };
 
+  /**
+   * @function handleSubmit
+   * @description Envía las respuestas al servidor y obtiene predicciones
+   * @returns {Promise<void>}
+   * @throws {Error} Si hay un error en el proceso de predicción
+   */
   const handleSubmit = async () => {
     if (!sessionId) {
       setError('No hay una sesión activa');
@@ -91,12 +153,15 @@ export function ClassifierSystem() {
     setIsLoading(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/predict/${sessionId}`, {
+      const answersArray = [...answers];
+
+      // Endpoint específico para el clasificador
+      const response = await fetch(`${API_BASE_URL}/classifier/predict/${sessionId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(answers),
+        body: JSON.stringify(answersArray),
       });
 
       if (!response.ok) {
@@ -119,11 +184,21 @@ export function ClassifierSystem() {
     }
   };
 
+  /**
+   * @function handleDragOver
+   * @description Maneja el evento de arrastrar sobre la zona de carga
+   * @param {React.DragEvent<HTMLDivElement>} e - Evento de arrastre
+   */
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
   };
 
+  /**
+   * @function handleDrop
+   * @description Procesa el archivo soltado en la zona de carga
+   * @param {React.DragEvent<HTMLDivElement>} e - Evento de soltar
+   */
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -131,16 +206,14 @@ export function ClassifierSystem() {
     const files = e.dataTransfer.files;
     if (files?.length) {
       const file = files[0];
-      if (file.type === "text/csv" || 
-          file.type === "application/vnd.ms-excel" ||
-          file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
-        handleFileUpload(file);
-      } else {
-        setError("Por favor, sube solo archivos CSV o Excel (.csv, .xlsx, .xls)");
-      }
+      handleFileUpload(file);
     }
   };
 
+  /**
+   * @function handleDownloadTemplate
+   * @description Descarga la plantilla para el formato de datos correcto
+   */
   const handleDownloadTemplate = () => {
     // Ruta al archivo de plantilla
     const templateUrl = '/template.xlsx';
@@ -160,7 +233,6 @@ export function ClassifierSystem() {
       <div className="absolute inset-0 bg-gradient-to-br from-[#ffffff] via-[#f8fafc] to-[#ffffff]" 
            style={{ mixBlendMode: 'overlay' }} />
       <div className="absolute top-0 left-0 right-0 h-[600px] bg-gradient-to-r from-indigo-500/5 via-blue-500/5 to-sky-500/5 blur-[120px]" />
-
       <div className="relative max-w-7xl mx-auto p-4 md:p-8 lg:p-12 space-y-8">
         <Card className="border border-slate-200/60 bg-white/95 backdrop-blur-2xl shadow-2xl">
           <CardHeader className="flex flex-col gap-4 pt-6 md:pt-8">
@@ -174,7 +246,7 @@ export function ClassifierSystem() {
             </div>
             <div className="text-center space-y-3 pb-2">
               <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#3b82f6] to-[#60a5fa] bg-clip-text text-transparent">
-                Sistema de Clasificación
+                Sistema de Experto con varios modelos
               </h1>
             </div>
           </CardHeader>

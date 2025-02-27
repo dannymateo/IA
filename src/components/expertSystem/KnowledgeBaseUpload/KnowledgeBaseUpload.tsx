@@ -40,8 +40,8 @@ export function KnowledgeBaseUpload({
         >
           <FileUpload
             title="Carga tu archivo Excel"
-            formats={["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel"]}
-            formatsName={["Excel", "Excel"]}
+            formats={["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "text/csv"]}
+            formatsName={["Excel", "CSV"]}
             onFileUpload={onFileUpload}
             onDragOver={handleDragOver}
             onDrop={handleDrop}

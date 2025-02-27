@@ -45,11 +45,15 @@ session_data = {}
 session_lock = threading.Lock()
 
 class SessionData:
+    """
+    Clase para manejar los datos de sesión de cada usuario
+    Almacena datos temporales y mantiene el estado de la sesión
+    """
     def __init__(self, data: bytes, session_type: str):
-        self.id = str(uuid.uuid4())
-        self.data = data
-        self.created_at = datetime.now()
-        self.session_type = session_type  # 'excel' o 'image'
+        self.id = str(uuid.uuid4())  # Identificador único de sesión
+        self.data = data             # Datos binarios (imagen o excel)
+        self.created_at = datetime.now()  # Timestamp de creación
+        self.session_type = session_type  # Tipo de sesión ('excel' o 'image')
         # Para sistema experto
         self.modelos = None
         # Para procesamiento de imágenes
@@ -57,6 +61,10 @@ class SessionData:
 
 # ... Mantener las funciones de limpieza de sesiones existentes ...
 def limpiar_sesiones_antiguas():
+    """
+    Elimina sesiones que tienen más de 1 hora de antigüedad
+    para liberar memoria del servidor
+    """
     with session_lock:
         tiempo_actual = datetime.now()
         sesiones_a_eliminar = []
@@ -77,6 +85,14 @@ async def startup_event():
 
 # Funciones del sistema experto
 def cargar_datos_desde_excel(archivo_excel):
+    """
+    Carga y preprocesa datos desde un archivo Excel/CSV
+    
+    Args:
+        archivo_excel: Archivo en formato bytes o path
+    Returns:
+        DataFrame procesado o None si hay error
+    """
     try:
         if isinstance(archivo_excel, bytes):
             df = pd.read_csv(io.BytesIO(archivo_excel))
@@ -94,6 +110,14 @@ def cargar_datos_desde_excel(archivo_excel):
         return None
 
 def entrenar_modelo_knn(df):
+    """
+    Entrena múltiples modelos de clasificación y evalúa su precisión
+    
+    Args:
+        df: DataFrame con datos de entrenamiento
+    Returns:
+        tuple: (modelos entrenados, precisión de cada modelo, scaler)
+    """
     try:
         X = df.iloc[:, :-1]
         y = df.iloc[:, -1]
@@ -127,6 +151,14 @@ def entrenar_modelo_knn(df):
 
 # Funciones de procesamiento de imágenes
 def process_single_kmeans(args):
+    """
+    Procesa una imagen con K-means para un valor específico de k
+    
+    Args:
+        args: tupla (dataset, k, shape)
+    Returns:
+        str: imagen procesada en formato base64
+    """
     dataset, k, shape = args
     logger.info(f"Iniciando clustering con k={k}")
     
@@ -182,12 +214,12 @@ def process_image_with_kmeans(image_array: np.ndarray, n_clusters: int) -> List[
         logger.error(f"Error en procesamiento: {str(e)}")
         raise
 
-# Rutas del sistema experto
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
+# Rutas del sistema clasificador
+@app.post("/classifier/upload/")
+async def upload_classifier_file(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        session = SessionData(contents, 'excel')
+        session = SessionData(contents, 'classifier')
         
         df = cargar_datos_desde_excel(contents)
         if df is None:
@@ -206,18 +238,21 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/predict/{session_id}")
-async def predict(session_id: str, respuestas: List[float]):
+@app.post("/classifier/predict/{session_id}")
+async def predict_classifier(session_id: str, respuestas: List[float]):
+    """
+    Endpoint para realizar predicciones usando los modelos entrenados
+    """
     try:
         with session_lock:
             session = session_data.get(session_id)
-            if not session or session.session_type != 'excel':
+            if not session or session.session_type != 'classifier':
                 raise HTTPException(status_code=404, detail="Sesión no encontrada")
         
         df = cargar_datos_desde_excel(session.data)
         if df is None:
             raise HTTPException(status_code=400, detail="Error al cargar los datos")
-            
+        
         if not hasattr(session, 'modelos') or session.modelos is None:
             modelos, accuracies, scaler = entrenar_modelo_knn(df)
             if modelos is None:
@@ -226,10 +261,8 @@ async def predict(session_id: str, respuestas: List[float]):
             session.accuracies = accuracies
             session.scaler = scaler
         
-        # Normalizar los datos de entrada
         respuestas_norm = session.scaler.transform([respuestas])
         
-        # Realizar predicciones con todos los modelos
         predicciones = {}
         for nombre, modelo in session.modelos.items():
             pred_valor = int(modelo.predict(respuestas_norm)[0])
@@ -239,7 +272,6 @@ async def predict(session_id: str, respuestas: List[float]):
                 "accuracy": session.accuracies[nombre]
             }
         
-        # Tomar la decisión por mayoría
         votos_positivos = sum(1 for pred in predicciones.values() if pred["valor"] == 1)
         prediccion_final = "Posible caso de diabetes" if votos_positivos > len(predicciones)/2 else "No se detecta diabetes"
         
@@ -250,6 +282,87 @@ async def predict(session_id: str, respuestas: List[float]):
     except HTTPException as he:
         raise he
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Rutas del sistema experto
+@app.post("/expert-system/upload/")
+async def upload_expert_file(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+        session = SessionData(contents, 'expert')
+        
+        # Aquí asumimos que el archivo es Excel y tiene el formato correcto para el sistema experto
+        df = pd.read_excel(io.BytesIO(contents))
+        if df.empty:
+            raise HTTPException(status_code=400, detail="El archivo está vacío")
+            
+        preguntas = df.columns[:-1].tolist()
+        
+        with session_lock:
+            session_data[session.id] = session
+        
+        return {
+            "message": "Base de conocimiento cargada correctamente",
+            "session_id": session.id,
+            "questions": preguntas
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/expert-system/predict/{session_id}")
+async def predict_expert(session_id: str, respuestas: List[int]):
+    """
+    Endpoint para obtener recomendaciones del sistema experto usando KNN
+    """
+    try:
+        with session_lock:
+            session = session_data.get(session_id)
+            if not session or session.session_type != 'expert':
+                raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        # Leer el Excel con la base de conocimiento
+        df = pd.read_excel(io.BytesIO(session.data))
+        if df.empty:
+            raise HTTPException(status_code=400, detail="Error al cargar la base de conocimiento")
+
+        # Preprocesar los datos
+        # Codificar las decisiones como valores numéricos
+        label_encoder = LabelEncoder()
+        df_procesado = df.copy()
+        df_procesado['Decisión'] = label_encoder.fit_transform(df['Decisión'])
+
+        # Separar características (X) y etiquetas (y)
+        X = df_procesado.iloc[:, :-1]  # Todas las columnas excepto la última
+        y = df_procesado.iloc[:, -1]   # Última columna (Decisión)
+
+        # Entrenar el modelo KNN
+        knn = KNeighborsClassifier(n_neighbors=3)  # Usar 3 vecinos
+        knn.fit(X, y)
+
+        # Convertir las respuestas del usuario en un formato adecuado
+        respuestas_array = np.array(respuestas).reshape(1, -1)
+
+        # Predecir la decisión
+        decision_codificada = knn.predict(respuestas_array)
+        decision = label_encoder.inverse_transform(decision_codificada)
+
+        # Obtener probabilidades de cada clase
+        probabilidades = knn.predict_proba(respuestas_array)[0]
+        max_prob = max(probabilidades)
+        
+        # Crear mensaje de confianza
+        nivel_confianza = "alta" if max_prob > 0.8 else "media" if max_prob > 0.6 else "baja"
+        
+        return {
+            "decision": decision[0],
+            "confianza": {
+                "nivel": nivel_confianza,
+                "valor": float(max_prob)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error en sistema experto: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Rutas de procesamiento de imágenes

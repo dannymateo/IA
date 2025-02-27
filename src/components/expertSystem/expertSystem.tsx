@@ -10,23 +10,72 @@ import { Questionnaire } from "./Questionnaire";
 import { KnowledgeBaseUpload } from "./KnowledgeBaseUpload";
 import { ErrorDisplay } from "./ErrorDisplay";
 
+/**
+ * @component ExpertSystem
+ * @description Componente principal del sistema experto que permite cargar una base de conocimiento,
+ * responder preguntas y obtener recomendaciones basadas en las respuestas.
+ * @returns {JSX.Element} Renderiza la interfaz del sistema experto
+ */
 export function ExpertSystem() {
+    /**
+     * @type {Record<number, boolean>} Estado para almacenar las respuestas del usuario
+     */
     const [answers, setAnswers] = useState<Record<number, boolean>>({});
+    
+    /**
+     * @type {Question[]} Estado para almacenar las preguntas cargadas
+     */
     const [questions, setQuestions] = useState<Question[]>([]);
+    
+    /**
+     * @type {string} Estado para almacenar la recomendación generada
+     */
     const [recommendation, setRecommendation] = useState<string>("");
+    
+    /**
+     * @type {string} Estado para almacenar mensajes de error
+     */
     const [error, setError] = useState<string>("");
+    
+    /**
+     * @type {boolean} Estado para controlar estados de carga
+     */
     const [isLoading, setIsLoading] = useState(false);
+    
     const fileInputRef = useRef<HTMLInputElement>(null);
     const API_BASE_URL = 'https://dasscoin.zapto.org';
+    
+    /**
+     * @type {string | null} Estado para almacenar el ID de sesión actual
+     */
     const [sessionId, setSessionId] = useState<string | null>(null);
   
+    /**
+     * @function handleFileUpload
+     * @param {File} file - Archivo Excel con la base de conocimiento
+     * @description Maneja la carga del archivo de la base de conocimiento al servidor
+     */
     const handleFileUpload = async (file: File) => {
       setIsLoading(true);
+      
+      // Validar el tipo de archivo - Solo Excel para sistema experto
+      const validTypes = [
+        "application/vnd.ms-excel", // .xls
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+      ];
+
+      if (!validTypes.includes(file.type)) {
+        setError("Por favor, sube solo archivos Excel (.xlsx, .xls)");
+        setIsLoading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append('file', file);
   
       try {
-        const response = await fetch(`${API_BASE_URL}/upload/`, {
+        // Cambiar endpoint para sistema experto
+        const response = await fetch(`${API_BASE_URL}/expert-system/upload/`, {
           method: 'POST',
           body: formData,
         });
@@ -60,11 +109,21 @@ export function ExpertSystem() {
       }
     };
   
+    /**
+     * @function handleDragOver
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de arrastre
+     * @description Maneja el evento cuando se arrastra un archivo sobre la zona de carga
+     */
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
     };
   
+    /**
+     * @function handleDrop
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de soltar
+     * @description Maneja el evento cuando se suelta un archivo en la zona de carga
+     */
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
@@ -99,7 +158,8 @@ export function ExpertSystem() {
         // Convertir las respuestas al formato que espera el backend
         const answersArray = questions.map(q => answers[q.id] ? 1 : 0);
         
-        const response = await fetch(`${API_BASE_URL}/predict/${sessionId}`, {
+        // Cambiar endpoint para sistema experto
+        const response = await fetch(`${API_BASE_URL}/expert-system/predict/${sessionId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -126,6 +186,10 @@ export function ExpertSystem() {
       }
     };
   
+    /**
+     * @function handleDownloadTemplate
+     * @description Maneja la descarga de la plantilla Excel para la base de conocimiento
+     */
     const handleDownloadTemplate = () => {
       // Ruta al archivo de plantilla
       const templateUrl = '/template.xlsx';

@@ -12,6 +12,21 @@ import { ResultsGrid } from "./ResultsGrid";
 import { FileUpload } from "@/components/fileUpload";
 import { StepsControl } from "./StepsControl";
 
+/**
+ * @interface ProcessvideoProps
+ * @description Propiedades del componente Processvideo (actualmente vacío ya que no recibe props)
+ */
+
+/**
+ * @component Processvideo
+ * @description Componente principal para procesar imágenes y convertirlas en secuencias de video.
+ * Permite cargar imágenes, procesarlas en pasos y generar una animación de video.
+ * 
+ * @example
+ * ```tsx
+ * <Processvideo />
+ * ```
+ */
 export function Processvideo() {
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [processedImages, setProcessedImages] = useState<string[]>([]);
@@ -27,6 +42,11 @@ export function Processvideo() {
     const [originalFile, setOriginalFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
   
+    /**
+     * @function handleFileUpload
+     * @description Maneja la carga de archivos, procesa la imagen y configura el ID de sesión
+     * @param {File} file - Archivo de imagen a procesar
+     */
     const handleFileUpload = useCallback(async (file: File) => {
       setError("");
       setIsLoading(true);
@@ -68,6 +88,12 @@ export function Processvideo() {
       }
     }, [videoUrl]);
   
+    /**
+     * @function readFileAsDataURL
+     * @description Convierte un archivo en una URL de datos
+     * @param {File} file - Archivo a convertir
+     * @returns {Promise<string>} URL de datos del archivo
+     */
     const readFileAsDataURL = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -77,6 +103,11 @@ export function Processvideo() {
       });
     };
 
+    /**
+     * @function createVideo
+     * @description Crea un video a partir de una secuencia de imágenes
+     * @param {string[]} images - Array de URLs de imágenes
+     */
     const createVideo = useCallback(async (images: string[]) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
@@ -141,6 +172,12 @@ export function Processvideo() {
       }
     }, [videoUrl]);
   
+    /**
+     * @function loadImage
+     * @description Carga una imagen desde una URL
+     * @param {string} src - URL de la imagen
+     * @returns {Promise<HTMLImageElement>} Elemento de imagen cargado
+     */
     const loadImage = (src: string): Promise<HTMLImageElement> => {
       return new Promise((resolve) => {
         const img = new Image();
@@ -149,6 +186,10 @@ export function Processvideo() {
       });
     };
   
+    /**
+     * @function resetProcess
+     * @description Reinicia el proceso de procesamiento de imágenes
+     */
     const resetProcess = useCallback(() => {
       setProcessedImages([]);
       setVideoUrl(null);
@@ -162,6 +203,11 @@ export function Processvideo() {
       }
     };
   
+    /**
+     * @function processImage
+     * @description Procesa la imagen utilizando la API
+     * @param {string} imageUrl - URL de la imagen a procesar
+     */
     const processImage = async (imageUrl: string) => {
       if (!sessionId) {
         setError('Por favor, vuelve a subir la imagen para procesarla.');
@@ -203,11 +249,21 @@ export function Processvideo() {
       }
     };
   
+    /**
+     * @function handleDragOver
+     * @description Maneja el evento de arrastrar sobre la zona de carga
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de arrastre
+     */
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
     };
 
+    /**
+     * @function handleDrop
+     * @description Maneja el evento de soltar en la zona de carga
+     * @param {React.DragEvent<HTMLDivElement>} e - Evento de soltar
+     */
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       e.stopPropagation();
