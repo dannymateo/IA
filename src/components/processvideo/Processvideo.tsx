@@ -41,8 +41,9 @@ export function Processvideo() {
     const API_BASE_URL = 'https://dasscoin.zapto.org';
     const [originalFile, setOriginalFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [retryCount, setRetryCount] = useState(0);
     const MAX_RETRIES = 3;
-    const RETRY_DELAY = 2000; // 2 segundos
+    const RETRY_DELAY = 1000;
   
     /**
      * @function handleFileUpload
@@ -231,12 +232,11 @@ export function Processvideo() {
       setIsLoading(true);
       setProcessedImages([]);
       setIsComplete(false);
+      setRetryCount(0);
 
-      const MAX_RETRIES = 3;
-      const RETRY_DELAY = 1000; // 1 segundo entre reintentos
-      let retryCount = 0;
+      let currentRetry = 0;
 
-      while (retryCount < MAX_RETRIES) {
+      while (currentRetry < MAX_RETRIES) {
         try {
           const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
             method: 'POST',
@@ -245,21 +245,21 @@ export function Processvideo() {
             }
           });
 
-          // Si la sesión no se encuentra o expiró, intentar recargar la imagen
           if (response.status === 404 || response.status === 410) {
-            if (originalFile && retryCount < MAX_RETRIES - 1) {
-              console.log(`Reintentando carga de imagen (${retryCount + 1}/${MAX_RETRIES})`);
+            if (originalFile && currentRetry < MAX_RETRIES - 1) {
+              console.log(`Reintentando carga de imagen (${currentRetry + 1}/${MAX_RETRIES})`);
               await handleFileUpload(originalFile);
-              retryCount++;
+              currentRetry++;
+              setRetryCount(currentRetry);
               await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
               continue;
             }
           }
 
-          // Si la sesión está siendo procesada, esperar y reintentar
           if (response.status === 409) {
-            console.log(`Sesión ocupada, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
-            retryCount++;
+            console.log(`Sesión ocupada, reintentando (${currentRetry + 1}/${MAX_RETRIES})`);
+            currentRetry++;
+            setRetryCount(currentRetry);
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
             continue;
           }
@@ -281,15 +281,16 @@ export function Processvideo() {
           break;
 
         } catch (error) {
-          retryCount++;
+          currentRetry++;
+          setRetryCount(currentRetry);
           
-          if (retryCount >= MAX_RETRIES) {
+          if (currentRetry >= MAX_RETRIES) {
             console.error('Error en el procesamiento:', error);
             setError(error instanceof Error ? error.message : 'Error al procesar la imagen');
             break;
           }
 
-          console.log(`Reintentando después de error (${retryCount}/${MAX_RETRIES})`);
+          console.log(`Reintentando después de error (${currentRetry}/${MAX_RETRIES})`);
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         }
       }
