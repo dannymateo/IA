@@ -222,78 +222,78 @@ export function Processvideo() {
      * @description Procesa la imagen utilizando la API
      * @param {string} imageUrl - URL de la imagen a procesar
      */
-    const processImage = async (imageUrl: string, retryCount = 0) => {
+    const processImage = async (imageUrl: string) => {
       if (!sessionId) {
-        setError('Por favor, vuelve a subir la imagen para procesarla.');
+        setError('Por favor, vuelva a subir la imagen para procesarla.');
         return;
       }
 
       setIsLoading(true);
       setProcessedImages([]);
       setIsComplete(false);
-      
-      try {
-        const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
-        });
 
-        // Manejar diferentes tipos de errores
-        if (!response.ok) {
-          const errorData = await response.json();
-          
-          // Sesión no encontrada - Reintentar con nueva sesión
-          if (response.status === 404) {
-            if (originalFile && retryCount < MAX_RETRIES) {
-              console.log(`Reintentando procesamiento (${retryCount + 1}/${MAX_RETRIES})`);
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY = 1000; // 1 segundo entre reintentos
+      let retryCount = 0;
+
+      while (retryCount < MAX_RETRIES) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+
+          // Si la sesión no se encuentra o expiró, intentar recargar la imagen
+          if (response.status === 404 || response.status === 410) {
+            if (originalFile && retryCount < MAX_RETRIES - 1) {
+              logger.info(`Reintentando carga de imagen (${retryCount + 1}/${MAX_RETRIES})`);
               await handleFileUpload(originalFile);
-              return processImage(imageUrl, retryCount + 1);
+              retryCount++;
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              continue;
             }
           }
-          
-          // Sesión en uso - Esperar y reintentar
-          if (response.status === 409 && retryCount < MAX_RETRIES) {
-            console.log(`Sesión ocupada, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+
+          // Si la sesión está siendo procesada, esperar y reintentar
+          if (response.status === 409) {
+            retryCount++;
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            return processImage(imageUrl, retryCount + 1);
+            continue;
           }
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Error al procesar la imagen');
+          }
+
+          const responseData = await response.json();
           
-          throw new Error(errorData.detail || 'Error al procesar la imagen');
-        }
+          if (!responseData.images || responseData.images.length === 0) {
+            throw new Error('No se obtuvieron resultados del procesamiento');
+          }
 
-        const responseData = await response.json();
-        
-        // Verificar la respuesta
-        if (!responseData.images || responseData.images.length === 0) {
-          throw new Error('No se pudo procesar la imagen. Por favor, intenta con otra imagen.');
-        }
-
-        if (responseData.status === 'success') {
           setProcessedImages(responseData.images);
           await createVideo(responseData.images);
           setIsComplete(true);
-        } else {
-          throw new Error('Error en el procesamiento de la imagen');
-        }
-        
-      } catch (error) {
-        console.error('Error en el procesamiento:', error);
-        
-        // Reintentar en caso de error de red u otros errores recuperables
-        if (retryCount < MAX_RETRIES && originalFile) {
-          console.warn(`Error en el procesamiento, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+          break; // Salir del bucle si el procesamiento fue exitoso
+
+        } catch (error) {
+          retryCount++;
+          
+          if (retryCount >= MAX_RETRIES) {
+            console.error('Error en el procesamiento:', error);
+            setError(error instanceof Error ? error.message : 'Error al procesar la imagen');
+            break;
+          }
+
+          // Esperar antes de reintentar
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          return processImage(imageUrl, retryCount + 1);
         }
-        
-        setError('Hubo un error al procesar la imagen. Por favor, intenta subir la imagen nuevamente.');
-        setSessionId(null);
-      } finally {
-        setIsLoading(false);
       }
+
+      setIsLoading(false);
     };
   
     /**
@@ -442,7 +442,7 @@ export function Processvideo() {
                 <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-4 py-8">
                   <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
                   <p className="text-sm text-slate-600 text-center">
-                    Procesando imagen...
+                    {retryCount > 0 ? `Reintentando proceso... (Intento ${retryCount}/${MAX_RETRIES})` : 'Procesando imagen...'}
                   </p>
                 </div>
               )}
@@ -457,12 +457,14 @@ export function Processvideo() {
                       className="bg-red-100 text-red-600 hover:bg-red-200"
                       onPress={() => {
                         setError("");
-                        if (fileInputRef.current) {
+                        if (originalFile) {
+                          handleFileUpload(originalFile);
+                        } else if (fileInputRef.current) {
                           fileInputRef.current.click();
                         }
                       }}
                     >
-                      Subir Nueva Imagen
+                      Reintentar
                     </Button>
                   </div>
                 </div>

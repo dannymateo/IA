@@ -50,74 +50,139 @@ class SessionData:
     Almacena datos temporales y mantiene el estado de la sesión
     """
     def __init__(self, data: bytes, session_type: str):
-        self.id = str(uuid.uuid4())  # Identificador único de sesión
-        self.data = data             # Datos binarios (imagen o excel)
-        self.created_at = datetime.now()  # Timestamp de creación
-        self.session_type = session_type  # Tipo de sesión ('excel' o 'image')
-        self.last_accessed = datetime.now()  # Último acceso a la sesión
-        self.retry_count = 0         # Contador de reintentos
-        self.is_processing = False   # Flag para indicar si la sesión está en uso
-        # Para sistema experto
+        self.id = str(uuid.uuid4())
+        self.data = data
+        self.created_at = datetime.now()
+        self.session_type = session_type
+        self.last_accessed = datetime.now()
+        self.retry_count = 0
+        self.is_processing = False
         self.modelos = None
-        # Para procesamiento de imágenes
         self.processed_images = []
+        self.status = 'active'
+        self.lock = asyncio.Lock()  # Lock por sesión para operaciones concurrentes
+
+    async def acquire_lock(self, timeout: float = 10.0) -> bool:
+        """Intenta adquirir el lock de la sesión con timeout"""
+        try:
+            await asyncio.wait_for(self.lock.acquire(), timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+    def release_lock(self):
+        """Libera el lock de la sesión"""
+        try:
+            self.lock.release()
+        except RuntimeError:
+            pass  # Lock ya estaba liberado
 
     def update_access(self):
-        """Actualiza el timestamp de último acceso"""
-        self.last_accessed = datetime.now()
+        """Actualiza el timestamp de último acceso y maneja el estado"""
+        current_time = datetime.now()
+        if current_time - self.last_accessed > timedelta(minutes=5):
+            self.retry_count = 0
+            if self.is_processing:  # Auto-reset si está bloqueado por mucho tiempo
+                self.is_processing = False
+        self.last_accessed = current_time
 
-def get_session(session_id: str, session_type: str = None) -> SessionData:
-    """
-    Obtiene una sesión de forma segura con manejo de errores
-    """
-    with session_lock:
+    def is_valid(self) -> bool:
+        """Verifica si la sesión es válida para usar"""
+        return (
+            self.status == 'active' and
+            datetime.now() - self.created_at < timedelta(hours=4) and
+            datetime.now() - self.last_accessed < timedelta(hours=2)
+        )
+
+async def get_session(session_id: str, session_type: str = None) -> SessionData:
+    """Obtiene y valida una sesión de forma segura"""
+    async with asyncio.Lock():  # Lock global para acceso al diccionario
         session = session_data.get(session_id)
+        
         if not session:
             logger.error(f"Sesión no encontrada: {session_id}")
-            raise HTTPException(status_code=404, detail="Sesión no encontrada")
-        
+            raise HTTPException(
+                status_code=404,
+                detail="Sesión no encontrada. Por favor, vuelva a cargar el archivo."
+            )
+
+        if not session.is_valid():
+            logger.error(f"Sesión inválida o expirada: {session_id}")
+            # Limpiar sesión inválida
+            session.status = 'inactive'
+            raise HTTPException(
+                status_code=410,
+                detail="La sesión ha expirado. Por favor, vuelva a cargar el archivo."
+            )
+
         if session_type and session.session_type != session_type:
             logger.error(f"Tipo de sesión incorrecto. Esperado: {session_type}, Actual: {session.session_type}")
-            raise HTTPException(status_code=400, detail="Tipo de sesión incorrecto")
-        
-        # Actualizar último acceso
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tipo de sesión incorrecto. Se esperaba {session_type}."
+            )
+
+        # Intentar adquirir el lock de la sesión
+        if not await session.acquire_lock():
+            logger.warning(f"Sesión bloqueada: {session_id}")
+            raise HTTPException(
+                status_code=409,
+                detail="La sesión está ocupada. Por favor, espere."
+            )
+
         session.update_access()
         return session
 
-def limpiar_sesiones_antiguas():
-    """
-    Elimina sesiones antiguas o bloqueadas con manejo inteligente
-    """
-    with session_lock:
-        tiempo_actual = datetime.now()
-        sesiones_a_eliminar = []
-        
-        for session_id, session in session_data.items():
-            # Eliminar sesiones antiguas (más de 2 horas sin acceso)
-            if tiempo_actual - session.last_accessed > timedelta(hours=2):
-                sesiones_a_eliminar.append(session_id)
-                logger.info(f"Eliminando sesión inactiva: {session_id}")
-                
-            # Desbloquear sesiones atascadas (en procesamiento por más de 5 minutos)
-            elif session.is_processing and tiempo_actual - session.last_accessed > timedelta(minutes=5):
-                session.is_processing = False
-                logger.warning(f"Desbloqueando sesión atascada: {session_id}")
-                
-        for session_id in sesiones_a_eliminar:
-            del session_data[session_id]
+async def cleanup_session(session: SessionData):
+    """Limpia y libera recursos de una sesión"""
+    try:
+        session.is_processing = False
+        session.release_lock()
+    except Exception as e:
+        logger.error(f"Error al limpiar sesión: {e}")
 
-async def limpiar_sesiones_periodicamente():
-    while True:
-        try:
-            limpiar_sesiones_antiguas()
-            # Reducimos la frecuencia de limpieza a 30 minutos
-            await asyncio.sleep(1800)
-        except Exception as e:
-            logger.error(f"Error en limpieza periódica: {e}")
+async def limpiar_sesiones_antiguas():
+    """Limpia sesiones antiguas y libera recursos"""
+    try:
+        async with asyncio.Lock():
+            tiempo_actual = datetime.now()
+            sesiones_a_eliminar = []
+            
+            for session_id, session in session_data.items():
+                try:
+                    # Marcar sesiones inactivas
+                    if tiempo_actual - session.last_accessed > timedelta(hours=2):
+                        session.status = 'inactive'
+                        logger.info(f"Marcando sesión como inactiva: {session_id}")
+                    
+                    # Eliminar sesiones muy antiguas
+                    if tiempo_actual - session.created_at > timedelta(hours=4):
+                        sesiones_a_eliminar.append(session_id)
+                        logger.info(f"Eliminando sesión antigua: {session_id}")
+                    
+                    # Liberar sesiones bloqueadas
+                    elif session.is_processing and tiempo_actual - session.last_accessed > timedelta(minutes=5):
+                        await cleanup_session(session)
+                        logger.warning(f"Liberando sesión bloqueada: {session_id}")
+                
+                except Exception as e:
+                    logger.error(f"Error procesando sesión {session_id}: {e}")
+            
+            # Eliminar sesiones marcadas
+            for session_id in sesiones_a_eliminar:
+                try:
+                    session = session_data[session_id]
+                    await cleanup_session(session)
+                    del session_data[session_id]
+                except Exception as e:
+                    logger.error(f"Error eliminando sesión {session_id}: {e}")
+                    
+    except Exception as e:
+        logger.error(f"Error en limpieza de sesiones: {e}")
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(limpiar_sesiones_periodicamente())
+    asyncio.create_task(limpiar_sesiones_antiguas())
 
 # Funciones del sistema experto
 def cargar_datos_desde_excel(archivo_excel):
@@ -435,35 +500,26 @@ async def upload_image(file: UploadFile = File(...)):
 
 @app.post("/process-image/{session_id}")
 async def process_image(
-    session_id: str, 
+    session_id: str,
     steps: int = Query(..., description="Número de clusters para K-means", ge=2, le=100)
 ):
+    session = None
     try:
-        session = get_session(session_id, 'image')
+        session = await get_session(session_id, 'image')
         
-        # Verificar si la sesión ya está en procesamiento
-        if session.is_processing:
-            if datetime.now() - session.last_accessed < timedelta(minutes=5):
-                raise HTTPException(
-                    status_code=409, 
-                    detail="La imagen ya está siendo procesada"
-                )
-            else:
-                # Resetear sesión bloqueada
-                session.is_processing = False
-                
-        # Incrementar contador de reintentos
+        if session.retry_count >= 3:
+            session.status = 'inactive'
+            raise HTTPException(
+                status_code=429,
+                detail="Demasiados intentos. Por favor, vuelva a cargar la imagen."
+            )
+        
         session.retry_count += 1
-        if session.retry_count > 3:
-            logger.warning(f"Demasiados reintentos para la sesión {session_id}")
-            
-        # Marcar como en procesamiento
         session.is_processing = True
-        session.update_access()
         
-        logger.info(f"Procesando imagen para sesión: {session_id}")
-
         try:
+            logger.info(f"Procesando imagen para sesión: {session_id}")
+            
             def process():
                 nparr = np.frombuffer(session.data, np.uint8)
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -477,8 +533,7 @@ async def process_image(
                 )
             
             session.processed_images = processed_images
-            session.is_processing = False
-            session.update_access()
+            session.retry_count = 0
             
             return {
                 "images": processed_images,
@@ -487,11 +542,14 @@ async def process_image(
             }
             
         except Exception as e:
-            session.is_processing = False
-            raise e
+            raise HTTPException(status_code=500, detail=str(e))
             
     except Exception as e:
         logger.error(f"Error en endpoint process-image: {str(e)}")
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    finally:
+        if session:
+            await cleanup_session(session) 
