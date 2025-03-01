@@ -54,30 +54,66 @@ class SessionData:
         self.data = data             # Datos binarios (imagen o excel)
         self.created_at = datetime.now()  # Timestamp de creación
         self.session_type = session_type  # Tipo de sesión ('excel' o 'image')
+        self.last_accessed = datetime.now()  # Último acceso a la sesión
+        self.retry_count = 0         # Contador de reintentos
+        self.is_processing = False   # Flag para indicar si la sesión está en uso
         # Para sistema experto
         self.modelos = None
         # Para procesamiento de imágenes
         self.processed_images = []
 
-# ... Mantener las funciones de limpieza de sesiones existentes ...
+    def update_access(self):
+        """Actualiza el timestamp de último acceso"""
+        self.last_accessed = datetime.now()
+
+def get_session(session_id: str, session_type: str = None) -> SessionData:
+    """
+    Obtiene una sesión de forma segura con manejo de errores
+    """
+    with session_lock:
+        session = session_data.get(session_id)
+        if not session:
+            logger.error(f"Sesión no encontrada: {session_id}")
+            raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        
+        if session_type and session.session_type != session_type:
+            logger.error(f"Tipo de sesión incorrecto. Esperado: {session_type}, Actual: {session.session_type}")
+            raise HTTPException(status_code=400, detail="Tipo de sesión incorrecto")
+        
+        # Actualizar último acceso
+        session.update_access()
+        return session
+
 def limpiar_sesiones_antiguas():
     """
-    Elimina sesiones que tienen más de 1 hora de antigüedad
-    para liberar memoria del servidor
+    Elimina sesiones antiguas o bloqueadas con manejo inteligente
     """
     with session_lock:
         tiempo_actual = datetime.now()
         sesiones_a_eliminar = []
-        for session_id, data in session_data.items():
-            if tiempo_actual - data.created_at > timedelta(hours=1):
+        
+        for session_id, session in session_data.items():
+            # Eliminar sesiones antiguas (más de 2 horas sin acceso)
+            if tiempo_actual - session.last_accessed > timedelta(hours=2):
                 sesiones_a_eliminar.append(session_id)
+                logger.info(f"Eliminando sesión inactiva: {session_id}")
+                
+            # Desbloquear sesiones atascadas (en procesamiento por más de 5 minutos)
+            elif session.is_processing and tiempo_actual - session.last_accessed > timedelta(minutes=5):
+                session.is_processing = False
+                logger.warning(f"Desbloqueando sesión atascada: {session_id}")
+                
         for session_id in sesiones_a_eliminar:
             del session_data[session_id]
 
 async def limpiar_sesiones_periodicamente():
     while True:
-        limpiar_sesiones_antiguas()
-        await asyncio.sleep(3600)
+        try:
+            limpiar_sesiones_antiguas()
+            # Reducimos la frecuencia de limpieza a 30 minutos
+            await asyncio.sleep(1800)
+        except Exception as e:
+            logger.error(f"Error en limpieza periódica: {e}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -370,22 +406,31 @@ async def predict_expert(session_id: str, respuestas: List[int]):
 async def upload_image(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        session = SessionData(contents, 'image')
         
+        if not contents:
+            raise HTTPException(status_code=400, detail="Archivo vacío")
+            
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if img is None:
-            raise HTTPException(status_code=400, detail="No se pudo procesar la imagen")
+            raise HTTPException(status_code=400, detail="Formato de imagen no válido")
+            
+        session = SessionData(contents, 'image')
+        logger.info(f"Nueva sesión creada: {session.id}")
         
         with session_lock:
             session_data[session.id] = session
-        
+            
         return {
             "message": "Imagen cargada correctamente",
-            "session_id": session.id
+            "session_id": session.id,
+            "status": "ready"
         }
     except Exception as e:
+        logger.error(f"Error en upload-image: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/process-image/{session_id}")
@@ -394,27 +439,59 @@ async def process_image(
     steps: int = Query(..., description="Número de clusters para K-means", ge=2, le=100)
 ):
     try:
-        with session_lock:
-            session = session_data.get(session_id)
-            if not session or session.session_type != 'image':
-                raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        session = get_session(session_id, 'image')
         
-        def process():
-            nparr = np.frombuffer(session.data, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if img is None:
-                raise ValueError("No se pudo procesar la imagen")
-            return process_image_with_kmeans(img, steps)
+        # Verificar si la sesión ya está en procesamiento
+        if session.is_processing:
+            if datetime.now() - session.last_accessed < timedelta(minutes=5):
+                raise HTTPException(
+                    status_code=409, 
+                    detail="La imagen ya está siendo procesada"
+                )
+            else:
+                # Resetear sesión bloqueada
+                session.is_processing = False
+                
+        # Incrementar contador de reintentos
+        session.retry_count += 1
+        if session.retry_count > 3:
+            logger.warning(f"Demasiados reintentos para la sesión {session_id}")
+            
+        # Marcar como en procesamiento
+        session.is_processing = True
+        session.update_access()
         
-        with ThreadPoolExecutor() as executor:
-            processed_images = await asyncio.get_event_loop().run_in_executor(
-                executor, process
-            )
-        
-        session.processed_images = processed_images
-        
-        return {"images": processed_images}
-        
+        logger.info(f"Procesando imagen para sesión: {session_id}")
+
+        try:
+            def process():
+                nparr = np.frombuffer(session.data, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is None:
+                    raise ValueError("No se pudo procesar la imagen")
+                return process_image_with_kmeans(img, steps)
+            
+            with ThreadPoolExecutor() as executor:
+                processed_images = await asyncio.get_event_loop().run_in_executor(
+                    executor, process
+                )
+            
+            session.processed_images = processed_images
+            session.is_processing = False
+            session.update_access()
+            
+            return {
+                "images": processed_images,
+                "status": "success",
+                "session_id": session_id
+            }
+            
+        except Exception as e:
+            session.is_processing = False
+            raise e
+            
     except Exception as e:
-        logger.error(f"Error en endpoint: {str(e)}")
+        logger.error(f"Error en endpoint process-image: {str(e)}")
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(status_code=500, detail=str(e)) 

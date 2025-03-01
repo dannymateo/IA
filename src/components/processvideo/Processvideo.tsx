@@ -41,6 +41,8 @@ export function Processvideo() {
     const API_BASE_URL = 'https://dasscoin.zapto.org';
     const [originalFile, setOriginalFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 2000; // 2 segundos
   
     /**
      * @function handleFileUpload
@@ -52,40 +54,52 @@ export function Processvideo() {
       setIsLoading(true);
       setSessionId(null);
       setOriginalFile(file);
+      setProcessedImages([]);
       
       if (videoUrl) {
         URL.revokeObjectURL(videoUrl);
         setVideoUrl(null);
       }
   
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
+      let retryCount = 0;
+      while (retryCount < MAX_RETRIES) {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
 
-        const response = await fetch(`${API_BASE_URL}/upload-image/`, {
-          method: 'POST',
-          body: formData,
-        });
+          const response = await fetch(`${API_BASE_URL}/upload-image/`, {
+            method: 'POST',
+            body: formData,
+          });
 
-        if (!response.ok) {
-          throw new Error('Error al cargar la imagen. Por favor, intenta de nuevo.');
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Error al cargar la imagen');
+          }
+
+          const data = await response.json();
+          if (!data.session_id || data.status !== 'ready') {
+            throw new Error('Error en el servidor. Por favor, intenta de nuevo.');
+          }
+          
+          setSessionId(data.session_id);
+          const imageUrl = await readFileAsDataURL(file);
+          setSelectedImage(imageUrl);
+          setImageToProcess(imageUrl);
+          break;
+          
+        } catch (e) {
+          retryCount++;
+          if (retryCount >= MAX_RETRIES) {
+            console.error('Error al cargar la imagen:', e);
+            setError('Error al cargar la imagen. Por favor, intenta de nuevo.');
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         }
-
-        const data = await response.json();
-        if (!data.session_id) {
-          throw new Error('Error en el servidor. Por favor, intenta de nuevo.');
-        }
-        
-        setSessionId(data.session_id);
-        const imageUrl = await readFileAsDataURL(file);
-        setSelectedImage(imageUrl);
-        setImageToProcess(imageUrl);
-      } catch (e) {
-        console.error('Error al cargar la imagen:', e);
-        setError('Error al cargar la imagen. Por favor, intenta de nuevo.');
-      } finally {
-        setIsLoading(false);
       }
+      
+      setIsLoading(false);
     }, [videoUrl]);
   
     /**
@@ -208,7 +222,7 @@ export function Processvideo() {
      * @description Procesa la imagen utilizando la API
      * @param {string} imageUrl - URL de la imagen a procesar
      */
-    const processImage = async (imageUrl: string) => {
+    const processImage = async (imageUrl: string, retryCount = 0) => {
       if (!sessionId) {
         setError('Por favor, vuelve a subir la imagen para procesarla.');
         return;
@@ -226,22 +240,55 @@ export function Processvideo() {
           }
         });
 
-        const responseData = await response.json();
-
+        // Manejar diferentes tipos de errores
         if (!response.ok) {
-          throw new Error('Error al procesar la imagen. Por favor, intenta subir la imagen nuevamente.');
+          const errorData = await response.json();
+          
+          // Sesión no encontrada - Reintentar con nueva sesión
+          if (response.status === 404) {
+            if (originalFile && retryCount < MAX_RETRIES) {
+              logger.info(`Reintentando procesamiento (${retryCount + 1}/${MAX_RETRIES})`);
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              await handleFileUpload(originalFile);
+              return processImage(imageUrl, retryCount + 1);
+            }
+          }
+          
+          // Sesión en uso - Esperar y reintentar
+          if (response.status === 409 && retryCount < MAX_RETRIES) {
+            logger.info(`Sesión ocupada, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return processImage(imageUrl, retryCount + 1);
+          }
+          
+          throw new Error(errorData.detail || 'Error al procesar la imagen');
         }
 
+        const responseData = await response.json();
+        
+        // Verificar la respuesta
         if (!responseData.images || responseData.images.length === 0) {
           throw new Error('No se pudo procesar la imagen. Por favor, intenta con otra imagen.');
         }
 
-        setProcessedImages(responseData.images);
-        await createVideo(responseData.images);
-        setIsComplete(true);
+        if (responseData.status === 'success') {
+          setProcessedImages(responseData.images);
+          await createVideo(responseData.images);
+          setIsComplete(true);
+        } else {
+          throw new Error('Error en el procesamiento de la imagen');
+        }
         
       } catch (error) {
         console.error('Error en el procesamiento:', error);
+        
+        // Reintentar en caso de error de red u otros errores recuperables
+        if (retryCount < MAX_RETRIES && originalFile) {
+          logger.warn(`Error en el procesamiento, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          return processImage(imageUrl, retryCount + 1);
+        }
+        
         setError('Hubo un error al procesar la imagen. Por favor, intenta subir la imagen nuevamente.');
         setSessionId(null);
       } finally {
