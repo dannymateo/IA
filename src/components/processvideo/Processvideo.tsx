@@ -247,7 +247,7 @@ export function Processvideo() {
           // Sesión no encontrada - Reintentar con nueva sesión
           if (response.status === 404) {
             if (originalFile && retryCount < MAX_RETRIES) {
-              logger.info(`Reintentando procesamiento (${retryCount + 1}/${MAX_RETRIES})`);
+              console.log(`Reintentando procesamiento (${retryCount + 1}/${MAX_RETRIES})`);
               await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
               await handleFileUpload(originalFile);
               return processImage(imageUrl, retryCount + 1);
@@ -256,7 +256,7 @@ export function Processvideo() {
           
           // Sesión en uso - Esperar y reintentar
           if (response.status === 409 && retryCount < MAX_RETRIES) {
-            logger.info(`Sesión ocupada, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+            console.log(`Sesión ocupada, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
             return processImage(imageUrl, retryCount + 1);
           }
@@ -284,7 +284,7 @@ export function Processvideo() {
         
         // Reintentar en caso de error de red u otros errores recuperables
         if (retryCount < MAX_RETRIES && originalFile) {
-          logger.warn(`Error en el procesamiento, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
+          console.warn(`Error en el procesamiento, reintentando (${retryCount + 1}/${MAX_RETRIES})`);
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
           return processImage(imageUrl, retryCount + 1);
         }
