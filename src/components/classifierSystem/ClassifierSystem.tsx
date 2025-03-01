@@ -215,13 +215,13 @@ export function ClassifierSystem() {
    * @description Descarga la plantilla para el formato de datos correcto
    */
   const handleDownloadTemplate = () => {
-    // Ruta al archivo de plantilla
-    const templateUrl = '/template.xlsx';
+    // Actualizar la URL al archivo de plantilla en el servidor
+    const templateUrl = 'https://dasscoin.zapto.org/files/classifierSystem.csv';
     
     // Crear un elemento <a> temporal
     const link = document.createElement('a');
     link.href = templateUrl;
-    link.download = 'plantilla_sistema_clasificador.xlsx';
+    link.download = 'plantilla_sistema_clasificador.csv';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

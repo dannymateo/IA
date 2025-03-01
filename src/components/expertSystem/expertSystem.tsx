@@ -191,8 +191,8 @@ export function ExpertSystem() {
      * @description Maneja la descarga de la plantilla Excel para la base de conocimiento
      */
     const handleDownloadTemplate = () => {
-      // Ruta al archivo de plantilla
-      const templateUrl = '/template.xlsx';
+      // Actualizar la URL al archivo de plantilla en el servidor
+      const templateUrl = 'https://dasscoin.zapto.org/files/expertSystem.xlsx';
       
       // Crear un elemento <a> temporal
       const link = document.createElement('a');
