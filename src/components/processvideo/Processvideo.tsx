@@ -2,7 +2,7 @@
 
 import { Button, CardHeader, Spinner } from "@nextui-org/react";
 import { Card, CardBody } from "@nextui-org/react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useState } from "react";
 import { useRef } from "react";
 import { Layers, RotateCw } from "lucide-react";
@@ -319,6 +319,17 @@ export function Processvideo() {
         }
       }
     };
+  
+    // Limpiar sesión al desmontar el componente
+    useEffect(() => {
+        return () => {
+            if (sessionId) {
+                fetch(`${API_BASE_URL}/cleanup-session/${sessionId}`, {
+                    method: 'POST'
+                }).catch(console.error);
+            }
+        };
+    }, [sessionId]);
   
     return (
       <div className="min-h-screen w-full bg-[#fafafa]">

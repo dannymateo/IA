@@ -57,6 +57,7 @@ class SessionData:
         self.last_accessed = datetime.now()
         self.is_processing = False
         self.processed_images = []
+        self.active = True
 
     def update_access(self):
         """Actualiza el timestamp de último acceso"""
@@ -64,7 +65,7 @@ class SessionData:
 
     def is_valid(self) -> bool:
         """Verifica si la sesión es válida"""
-        return datetime.now() - self.last_accessed < timedelta(minutes=30)
+        return self.active and datetime.now() - self.last_accessed < timedelta(hours=1)
 
 async def get_session(session_id: str, session_type: str = None) -> SessionData:
     """Obtiene y valida una sesión"""
@@ -92,15 +93,31 @@ async def get_session(session_id: str, session_type: str = None) -> SessionData:
     session.update_access()
     return session
 
+@app.post("/cleanup-session/{session_id}")
+async def cleanup_session(session_id: str):
+    try:
+        session = session_data.get(session_id)
+        if session:
+            session.active = False
+            if session.is_processing:
+                session.is_processing = False
+            logger.info(f"Sesión {session_id} marcada para limpieza")
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Error al limpiar sesión: {e}")
+        return {"status": "error"}
+
 async def limpiar_sesiones_antiguas():
-    """Limpia sesiones expiradas cada 15 minutos"""
+    """Limpia sesiones inactivas o expiradas"""
     while True:
         try:
             tiempo_actual = datetime.now()
             for session_id, session in list(session_data.items()):
-                if tiempo_actual - session.last_accessed > timedelta(minutes=30):
+                if (not session.active and tiempo_actual - session.last_accessed > timedelta(minutes=5)) or \
+                   (tiempo_actual - session.last_accessed > timedelta(hours=1)):
                     del session_data[session_id]
-            await asyncio.sleep(900)  # 15 minutos
+                    logger.info(f"Sesión {session_id} eliminada")
+            await asyncio.sleep(300)  # Revisar cada 5 minutos
         except Exception as e:
             logger.error(f"Error en limpieza de sesiones: {e}")
             await asyncio.sleep(60)
