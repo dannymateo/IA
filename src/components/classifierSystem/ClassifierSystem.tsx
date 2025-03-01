@@ -70,8 +70,8 @@ export function ClassifierSystem() {
   const [prediction, setPrediction] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [modelPredictions, setModelPredictions] = useState<ModelPredictions | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const API_BASE_URL = 'https://dasscoin.zapto.org';
 
   /**
@@ -86,7 +86,7 @@ export function ClassifierSystem() {
     setError("");
     setPrediction("");
     
-    // Validar el tipo de archivo - CSV y Excel para clasificador
+    // Validar el tipo de archivo
     const validTypes = [
       "text/csv",
       "application/vnd.ms-excel",
@@ -104,8 +104,7 @@ export function ClassifierSystem() {
     formData.append('file', file);
 
     try {
-      // Endpoint específico para el clasificador
-      const response = await fetch(`${API_BASE_URL}/classifier/upload/`, {
+      const response = await fetch(`${API_BASE_URL}/classifier/get-parameters/`, {
         method: 'POST',
         body: formData,
       });
@@ -117,16 +116,16 @@ export function ClassifierSystem() {
 
       const data = await response.json();
       
-      if (!data.questions || !data.session_id) {
+      if (!data.parameters) {
         throw new Error('Formato de datos inválido');
       }
 
-      const formattedQuestions: Question[] = data.questions.map((text: string, index: number) => ({
+      const formattedQuestions: Question[] = data.parameters.map((text: string, index: number) => ({
         id: index,
         text: text
       }));
 
-      setSessionId(data.session_id);
+      setSelectedFile(file);
       setQuestions(formattedQuestions);
       setAnswers(new Array(formattedQuestions.length).fill(null));
       
@@ -145,23 +144,21 @@ export function ClassifierSystem() {
    * @throws {Error} Si hay un error en el proceso de predicción
    */
   const handleSubmit = async () => {
-    if (!sessionId) {
-      setError('No hay una sesión activa');
+    if (!selectedFile) {
+      setError('No hay un archivo seleccionado');
       return;
     }
     
     setIsLoading(true);
     
     try {
-      const answersArray = [...answers];
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('answers', JSON.stringify(answers));
 
-      // Endpoint específico para el clasificador
-      const response = await fetch(`${API_BASE_URL}/classifier/predict/${sessionId}`, {
+      const response = await fetch(`${API_BASE_URL}/classifier/analyze/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(answersArray),
+        body: formData,
       });
 
       if (!response.ok) {

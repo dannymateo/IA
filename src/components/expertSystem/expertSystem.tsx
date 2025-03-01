@@ -17,96 +17,54 @@ import { ErrorDisplay } from "./ErrorDisplay";
  * @returns {JSX.Element} Renderiza la interfaz del sistema experto
  */
 export function ExpertSystem() {
-    /**
-     * @type {Record<number, boolean>} Estado para almacenar las respuestas del usuario
-     */
-    const [answers, setAnswers] = useState<Record<number, boolean>>({});
-    
-    /**
-     * @type {Question[]} Estado para almacenar las preguntas cargadas
-     */
     const [questions, setQuestions] = useState<Question[]>([]);
-    
-    /**
-     * @type {string} Estado para almacenar la recomendación generada
-     */
+    const [answers, setAnswers] = useState<Record<number, boolean>>({});
     const [recommendation, setRecommendation] = useState<string>("");
-    
-    /**
-     * @type {string} Estado para almacenar mensajes de error
-     */
     const [error, setError] = useState<string>("");
-    
-    /**
-     * @type {boolean} Estado para controlar estados de carga
-     */
     const [isLoading, setIsLoading] = useState(false);
-    
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const API_BASE_URL = 'https://dasscoin.zapto.org';
     
-    /**
-     * @type {string | null} Estado para almacenar el ID de sesión actual
-     */
-    const [sessionId, setSessionId] = useState<string | null>(null);
-  
     /**
      * @function handleFileUpload
      * @param {File} file - Archivo Excel con la base de conocimiento
      * @description Maneja la carga del archivo de la base de conocimiento al servidor
      */
     const handleFileUpload = async (file: File) => {
-      setIsLoading(true);
-      
-      // Validar el tipo de archivo - Solo Excel para sistema experto
-      const validTypes = [
-        "application/vnd.ms-excel", // .xls
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-      ];
-
-      if (!validTypes.includes(file.type)) {
-        setError("Por favor, sube solo archivos Excel (.xlsx, .xls)");
-        setIsLoading(false);
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('file', file);
-  
-      try {
-        // Cambiar endpoint para sistema experto
-        const response = await fetch(`${API_BASE_URL}/expert-system/upload/`, {
-          method: 'POST',
-          body: formData,
-        });
-  
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Error al cargar el archivo');
-        }
-  
-        const data = await response.json();
-        
-        if (!data.questions || !data.session_id) {
-          throw new Error('Formato de datos inválido');
-        }
-
-        // Convertir las preguntas al formato correcto
-        const formattedQuestions: Question[] = data.questions.map((text: string, index: number) => ({
-          id: index,
-          text: text
-        }));
-  
-        setSessionId(data.session_id);
-        setQuestions(formattedQuestions);
-        setAnswers({});
+        setIsLoading(true);
         setError("");
-      } catch (e) {
-        console.error('Error al cargar el archivo:', e);
-        setError('Error al cargar la base de conocimiento: ' + (e instanceof Error ? e.message : 'Error desconocido'));
-      } finally {
-        setIsLoading(false);
-      }
+        
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch(`${API_BASE_URL}/expert-system/get-questions/`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al cargar el archivo');
+            }
+
+            const data = await response.json();
+            
+            // Guardar las preguntas y el contenido del archivo
+            setQuestions(data.questions.map((text: string, index: number) => ({
+                id: index,
+                text: text
+            })));
+            setSelectedFile(file);
+            setAnswers({});
+            setRecommendation("");
+            
+        } catch (error) {
+            setError(error instanceof Error ? error.message : 'Error al cargar el archivo');
+        } finally {
+            setIsLoading(false);
+        }
     };
   
     /**
@@ -146,44 +104,37 @@ export function ExpertSystem() {
      * @description Envía las respuestas al servidor y obtiene la recomendación
      */
     const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!sessionId) {
-        setError('No hay una sesión activa');
-        return;
-      }
-      
-      setIsLoading(true);
-      
-      try {
-        // Convertir las respuestas al formato que espera el backend
-        const answersArray = questions.map(q => answers[q.id] ? 1 : 0);
-        
-        // Cambiar endpoint para sistema experto
-        const response = await fetch(`${API_BASE_URL}/expert-system/predict/${sessionId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(answersArray),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'Error al obtener la predicción');
+        e.preventDefault();
+        if (!selectedFile) {
+            setError('Por favor, seleccione un archivo');
+            return;
         }
 
-        const result = await response.json();
-        if (result.decision) {
-          setRecommendation(result.decision);
-          setError("");
-        } else {
-          throw new Error('No se recibió una decisión válida');
+        setIsLoading(true);
+        setError("");
+
+        try {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('answers', JSON.stringify(questions.map(q => answers[q.id] ? 1 : 0)));
+
+            const response = await fetch(`${API_BASE_URL}/expert-system/predict/`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al obtener la predicción');
+            }
+
+            const result = await response.json();
+            setRecommendation(result.decision);
+            
+        } catch (error) {
+            setError(error instanceof Error ? error.message : 'Error al procesar las respuestas');
+        } finally {
+            setIsLoading(false);
         }
-      } catch (e) {
-        setError('Error al obtener la recomendación: ' + (e instanceof Error ? e.message : 'Error desconocido'));
-      } finally {
-        setIsLoading(false);
-      }
     };
   
     /**

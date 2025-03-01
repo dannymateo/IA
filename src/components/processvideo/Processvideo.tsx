@@ -51,58 +51,21 @@ export function Processvideo() {
      * @description Maneja la carga de archivos, procesa la imagen y configura el ID de sesión
      * @param {File} file - Archivo de imagen a procesar
      */
-    const handleFileUpload = useCallback(async (file: File) => {
+    const handleFileUpload = async (file: File) => {
       setError("");
-      setIsLoading(true);
-      setSessionId(null);
       setOriginalFile(file);
       setProcessedImages([]);
+      setIsComplete(false);
       
       if (videoUrl) {
         URL.revokeObjectURL(videoUrl);
         setVideoUrl(null);
       }
-  
-      let retryCount = 0;
-      while (retryCount < MAX_RETRIES) {
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
 
-          const response = await fetch(`${API_BASE_URL}/upload-image/`, {
-            method: 'POST',
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Error al cargar la imagen');
-          }
-
-          const data = await response.json();
-          if (!data.session_id || data.status !== 'ready') {
-            throw new Error('Error en el servidor. Por favor, intenta de nuevo.');
-          }
-          
-          setSessionId(data.session_id);
-          const imageUrl = await readFileAsDataURL(file);
-          setSelectedImage(imageUrl);
-          setImageToProcess(imageUrl);
-          break;
-          
-        } catch (e) {
-          retryCount++;
-          if (retryCount >= MAX_RETRIES) {
-            console.error('Error al cargar la imagen:', e);
-            setError('Error al cargar la imagen. Por favor, intenta de nuevo.');
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        }
-      }
-      
-      setIsLoading(false);
-    }, [videoUrl]);
+      const imageUrl = await readFileAsDataURL(file);
+      setSelectedImage(imageUrl);
+      await processImage(file);
+    };
   
     /**
      * @function readFileAsDataURL
@@ -224,43 +187,18 @@ export function Processvideo() {
      * @description Procesa la imagen utilizando la API
      * @param {string} imageUrl - URL de la imagen a procesar
      */
-    const processImage = async (imageUrl: string) => {
-      if (!sessionId) {
-        setError('Por favor, vuelva a subir la imagen');
-        return;
-      }
-
+    const processImage = async (file: File) => {
       setIsLoading(true);
-      setIsProcessing(true);
       setError("");
 
       try {
-        const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE_URL}/process-image/?steps=${stepsCount}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+          body: formData,
         });
-
-        // Si la sesión expiró, intentar recargar la imagen
-        if (response.status === 404) {
-          if (originalFile) {
-            await handleFileUpload(originalFile);
-            // Esperar un momento y reintentar
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            await processImage(imageUrl);
-            return;
-          } else {
-            throw new Error('Sesión expirada. Por favor, vuelva a cargar la imagen');
-          }
-        }
-
-        // Si la imagen está siendo procesada, esperar y reintentar
-        if (response.status === 409) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          await processImage(imageUrl);
-          return;
-        }
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -281,7 +219,6 @@ export function Processvideo() {
         setError(error instanceof Error ? error.message : 'Error al procesar la imagen');
       } finally {
         setIsLoading(false);
-        setIsProcessing(false);
       }
     };
   
@@ -374,7 +311,16 @@ export function Processvideo() {
                       Sube una imagen para transformarla en una secuencia de colores única
                     </p>
                   </div>
-                  <FileUpload
+                  <StepsControl 
+                  stepsCount={stepsCount}
+                  setStepsCount={setStepsCount}
+                  description="Número de pasos para el procesamiento de colores. 
+                             Más pasos = mejor precisión, pero más tiempo de proceso."
+                />
+                </div>
+              </div>
+              <div className="w-full max-w-xl mx-auto">
+              <FileUpload
                     title="Sube una imagen para transformarla en una secuencia de colores única"
                     formats={["image/png", "image/jpeg", "image/jpg", "image/webp"]}
                     formatsName={["PNG", "JPEG", "JPG", "WEBP"]}
@@ -382,17 +328,6 @@ export function Processvideo() {
                     onDragOver={handleDragOver}
                     onDrop={handleDrop}
                   />
-                </div>
-              </div>
-
-              {/* Control de pasos con diseño mejorado */}
-              <div className="w-full max-w-xl mx-auto">
-                <StepsControl 
-                  stepsCount={stepsCount}
-                  setStepsCount={setStepsCount}
-                  description="Número de pasos para el procesamiento de colores. 
-                             Más pasos = mejor precisión, pero más tiempo de proceso."
-                />
               </div>
 
               {/* Botón de procesamiento */}
@@ -403,7 +338,7 @@ export function Processvideo() {
                     className="w-full mt-8 bg-blue-50 text-blue-600 border border-blue-200 py-4 rounded-xl
                     hover:bg-blue-100 transition-all duration-300 flex items-center justify-center gap-3 
                     disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
-                    onPress={() => processImage(imageToProcess)}
+                    onPress={() => processImage(originalFile!)}
                     isDisabled={isLoading}
                   >
                     {isLoading ? (

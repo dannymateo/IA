@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, Body, Form
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import numpy as np
@@ -21,6 +21,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+import json
 
 # Configurar logging
 logging.basicConfig(
@@ -352,48 +353,68 @@ async def upload_expert_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/expert-system/predict/{session_id}")
-async def predict_expert(session_id: str, respuestas: List[int]):
-    """
-    Endpoint para obtener recomendaciones del sistema experto usando KNN
-    """
+@app.post("/expert-system/get-questions/")
+async def get_questions(file: UploadFile = File(...)):
+    """Endpoint para obtener las preguntas del archivo"""
     try:
-        with session_lock:
-            session = session_data.get(session_id)
-            if not session or session.session_type != 'expert':
-                raise HTTPException(status_code=404, detail="Sesión no encontrada")
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
         
-        # Leer el Excel con la base de conocimiento
-        df = pd.read_excel(io.BytesIO(session.data))
+        if df.empty:
+            raise HTTPException(status_code=400, detail="El archivo está vacío")
+            
+        preguntas = df.columns[:-1].tolist()
+        
+        return {
+            "questions": preguntas
+        }
+    except Exception as e:
+        logger.error(f"Error al procesar archivo: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/expert-system/predict/")
+async def predict_expert(
+    file: UploadFile = File(...),
+    answers: str = Form(...)
+):
+    """Endpoint para procesar respuestas y obtener predicción"""
+    try:
+        # Leer el archivo y las respuestas
+        contents = await file.read()
+        answers_array = json.loads(answers)
+        
+        # Validar el archivo
+        df = pd.read_excel(io.BytesIO(contents))
         if df.empty:
             raise HTTPException(status_code=400, detail="Error al cargar la base de conocimiento")
 
+        # Validar que el número de respuestas coincida con las columnas
+        if len(answers_array) != len(df.columns) - 1:
+            raise HTTPException(
+                status_code=400, 
+                detail="El número de respuestas no coincide con las preguntas del archivo"
+            )
+
         # Preprocesar los datos
-        # Codificar las decisiones como valores numéricos
-        label_encoder = LabelEncoder()
         df_procesado = df.copy()
+        label_encoder = LabelEncoder()
         df_procesado['Decisión'] = label_encoder.fit_transform(df['Decisión'])
 
-        # Separar características (X) y etiquetas (y)
-        X = df_procesado.iloc[:, :-1]  # Todas las columnas excepto la última
-        y = df_procesado.iloc[:, -1]   # Última columna (Decisión)
+        # Separar características y etiquetas
+        X = df_procesado.iloc[:, :-1]
+        y = df_procesado.iloc[:, -1]
 
-        # Entrenar el modelo KNN
-        knn = KNeighborsClassifier(n_neighbors=3)  # Usar 3 vecinos
+        # Entrenar y predecir
+        knn = KNeighborsClassifier(n_neighbors=3)
         knn.fit(X, y)
-
-        # Convertir las respuestas del usuario en un formato adecuado
-        respuestas_array = np.array(respuestas).reshape(1, -1)
-
-        # Predecir la decisión
+        
+        respuestas_array = np.array(answers_array).reshape(1, -1)
         decision_codificada = knn.predict(respuestas_array)
         decision = label_encoder.inverse_transform(decision_codificada)
 
-        # Obtener probabilidades de cada clase
+        # Calcular confianza
         probabilidades = knn.predict_proba(respuestas_array)[0]
         max_prob = max(probabilidades)
-        
-        # Crear mensaje de confianza
         nivel_confianza = "alta" if max_prob > 0.8 else "media" if max_prob > 0.6 else "baja"
         
         return {
@@ -405,7 +426,7 @@ async def predict_expert(session_id: str, respuestas: List[int]):
         }
         
     except Exception as e:
-        logger.error(f"Error en sistema experto: {str(e)}")
+        logger.error(f"Error en predicción: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Rutas de procesamiento de imágenes
@@ -440,41 +461,110 @@ async def upload_image(file: UploadFile = File(...)):
             raise e
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/process-image/{session_id}")
+class ImageProcessor:
+    def __init__(self):
+        self.processing_lock = asyncio.Lock()
+
+    async def process_image(self, image_data: bytes, steps: int) -> dict:
+        """Procesa una imagen sin depender de sesiones"""
+        async with self.processing_lock:
+            try:
+                nparr = np.frombuffer(image_data, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if img is None:
+                    raise ValueError("No se pudo procesar la imagen")
+                
+                processed_images = process_image_with_kmeans(img, steps)
+                
+                return {
+                    "images": processed_images,
+                    "status": "success"
+                }
+                
+            except Exception as e:
+                logger.error(f"Error procesando imagen: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+# Instancia global del procesador
+image_processor = ImageProcessor()
+
+@app.post("/process-image/")
 async def process_image(
-    session_id: str,
+    file: UploadFile = File(...),
     steps: int = Query(..., description="Número de clusters para K-means", ge=2, le=100)
 ):
+    """Endpoint unificado para subir y procesar imagen"""
     try:
-        session = await get_session(session_id, 'image')
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Archivo vacío")
+            
+        result = await image_processor.process_image(contents, steps)
+        return result
         
-        if session.is_processing:
-            raise HTTPException(
-                status_code=409,
-                detail="La imagen ya está siendo procesada"
-            )
-        
-        session.is_processing = True
-        nparr = np.frombuffer(session.data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            raise ValueError("No se pudo procesar la imagen")
-        
-        processed_images = process_image_with_kmeans(img, steps)
-        session.processed_images = processed_images
-        
-        return {
-            "images": processed_images,
-            "status": "success"
-        }
-    
     except Exception as e:
         logger.error(f"Error en process-image: {str(e)}")
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
-    
-    finally:
-        if 'session' in locals():
-            session.is_processing = False 
+
+@app.post("/classifier/get-parameters/")
+async def get_classifier_parameters(file: UploadFile = File(...)):
+    """Endpoint para obtener los parámetros a analizar del archivo"""
+    try:
+        contents = await file.read()
+        df = cargar_datos_desde_excel(contents)
+        
+        if df is None:
+            raise HTTPException(status_code=400, detail="Error al cargar el archivo")
+            
+        parametros = df.columns[:-1].tolist()
+        
+        return {
+            "message": "Parámetros obtenidos correctamente",
+            "parameters": parametros
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/classifier/analyze/")
+async def analyze_classifier(
+    file: UploadFile = File(...),
+    answers: str = Form(...)
+):
+    """Endpoint para analizar las respuestas y obtener predicciones"""
+    try:
+        contents = await file.read()
+        respuestas = json.loads(answers)
+        
+        df = cargar_datos_desde_excel(contents)
+        if df is None:
+            raise HTTPException(status_code=400, detail="Error al cargar el archivo")
+
+        # Entrenar modelos
+        modelos, accuracies, scaler = entrenar_modelo_knn(df)
+        if modelos is None:
+            raise HTTPException(status_code=500, detail="Error al entrenar los modelos")
+
+        # Procesar respuestas
+        respuestas_norm = scaler.transform([respuestas])
+        
+        predicciones = {}
+        for nombre, modelo in modelos.items():
+            pred_valor = int(modelo.predict(respuestas_norm)[0])
+            predicciones[nombre] = {
+                "mensaje": "Posible caso de diabetes" if pred_valor == 1 else "No se detecta diabetes",
+                "valor": pred_valor,
+                "accuracy": accuracies[nombre]
+            }
+        
+        votos_positivos = sum(1 for pred in predicciones.values() if pred["valor"] == 1)
+        prediccion_final = "Posible caso de diabetes" if votos_positivos > len(predicciones)/2 else "No se detecta diabetes"
+        
+        return {
+            "decision": prediccion_final,
+            "predicciones_por_modelo": predicciones
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 
