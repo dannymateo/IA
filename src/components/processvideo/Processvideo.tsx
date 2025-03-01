@@ -89,57 +89,69 @@ export function Processvideo() {
   
       const stream = canvas.captureStream(30);
       
-      // Configurar opciones de codificación más compatibles
+      // Modificamos las opciones de codificación para mejor compatibilidad
       const options = {
-        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=h264') 
-          ? 'video/webm;codecs=h264'
-          : MediaRecorder.isTypeSupported('video/webm') 
-            ? 'video/webm'
-            : 'video/mp4',
-        videoBitsPerSecond: 2500000
+        mimeType: 'video/webm',
+        videoBitsPerSecond: 5000000, // Aumentamos el bitrate
       };
   
       try {
         const mediaRecorder = new MediaRecorder(stream, options);
         const chunks: Blob[] = [];
         
-        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
         
         mediaRecorder.onstop = () => {
-          const blob = new Blob(chunks, { type: options.mimeType });
-          if (videoUrl) URL.revokeObjectURL(videoUrl);
-          setVideoUrl(URL.createObjectURL(blob));
+          // Aseguramos que tengamos chunks antes de crear el blob
+          if (chunks.length > 0) {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            if (videoUrl) URL.revokeObjectURL(videoUrl);
+            const url = URL.createObjectURL(blob);
+            // Verificamos que el blob sea válido
+            if (blob.size > 0) {
+              setVideoUrl(url);
+            } else {
+              setError('Error al generar el video: tamaño de archivo inválido');
+            }
+          } else {
+            setError('No se pudieron capturar frames del video');
+          }
         };
   
-        mediaRecorder.start();
+        // Configuramos el intervalo de datos disponibles
+        mediaRecorder.start(100); // Capturamos datos cada 100ms
   
-        // Ajustar el frameDelay para dispositivos más lentos
-        const frameDelay = 100; // 10 FPS para mejor compatibilidad
-        let lastDrawTime = 0;
+        const frameDelay = 100; // 10 FPS
+        let currentFrame = 0;
   
-        const processFrame = async (index: number) => {
-          if (index >= images.length) {
+        const processFrame = async () => {
+          if (currentFrame >= images.length) {
             mediaRecorder.stop();
             return;
           }
   
-          const now = performance.now();
-          const timeSinceLastDraw = now - lastDrawTime;
-  
-          if (timeSinceLastDraw >= frameDelay) {
-            const img = await loadImage(images[index]);
+          try {
+            const img = await loadImage(images[currentFrame]);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
-            lastDrawTime = now;
-            requestAnimationFrame(() => processFrame(index + 1));
-          } else {
-            setTimeout(() => processFrame(index), frameDelay - timeSinceLastDraw);
+            currentFrame++;
+            setTimeout(processFrame, frameDelay);
+          } catch (error) {
+            console.error('Error procesando frame:', error);
+            setError('Error al procesar un frame del video');
+            mediaRecorder.stop();
           }
         };
   
-        processFrame(0);
+        processFrame();
+  
       } catch (error) {
         console.error('Error al crear el video:', error);
-        setError('No se pudo crear el video. Intente con una imagen más pequeña.');
+        setError('Error al crear el video. Intente con una imagen más pequeña o diferente formato.');
       }
     }, [videoUrl]);
   
