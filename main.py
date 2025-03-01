@@ -69,7 +69,19 @@ class SessionData:
         return self.active and datetime.now() - self.last_accessed < timedelta(hours=1)
 
 async def get_session(session_id: str, session_type: str = None) -> SessionData:
-    """Obtiene y valida una sesión"""
+    """
+    Obtiene y valida una sesión
+    
+    Args:
+        session_id: ID de la sesión a obtener
+        session_type: Tipo de sesión esperado
+        
+    Returns:
+        SessionData: Datos de la sesión
+        
+    Raises:
+        HTTPException: Si la sesión no existe o expiró
+    """
     session = session_data.get(session_id)
     
     if not session:
@@ -96,6 +108,15 @@ async def get_session(session_id: str, session_type: str = None) -> SessionData:
 
 @app.post("/cleanup-session/{session_id}")
 async def cleanup_session(session_id: str):
+    """
+    Limpia una sesión específica
+    
+    Args:
+        session_id: ID de la sesión a limpiar
+        
+    Returns:
+        dict: Estado de la operación
+    """
     try:
         session = session_data.get(session_id)
         if session:
@@ -109,7 +130,7 @@ async def cleanup_session(session_id: str):
         return {"status": "error"}
 
 async def limpiar_sesiones_antiguas():
-    """Limpia sesiones inactivas o expiradas"""
+    """Limpia periódicamente las sesiones inactivas o expiradas"""
     while True:
         try:
             tiempo_actual = datetime.now()
@@ -125,6 +146,7 @@ async def limpiar_sesiones_antiguas():
 
 @app.on_event("startup")
 async def startup_event():
+    """Inicia la tarea de limpieza de sesiones al arrancar la aplicación"""
     asyncio.create_task(limpiar_sesiones_antiguas())
 
 # Funciones del sistema experto
@@ -200,6 +222,7 @@ def process_single_kmeans(args):
     
     Args:
         args: tupla (dataset, k, shape)
+        
     Returns:
         str: imagen procesada en formato base64
     """
@@ -230,11 +253,22 @@ def process_single_kmeans(args):
         raise
 
 def process_image_with_kmeans(image_array: np.ndarray, n_clusters: int) -> List[str]:
+    """
+    Procesa una imagen aplicando K-means con diferentes valores de k
+    
+    Args:
+        image_array: Array NumPy con la imagen
+        n_clusters: Número máximo de clusters a usar
+        
+    Returns:
+        List[str]: Lista de imágenes procesadas en formato base64
+    """
     logger.info(f"Iniciando procesamiento de imagen con {n_clusters} clusters")
     
     try:
         image_rgb = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
         
+        # Redimensionar si la imagen es muy grande
         max_dimension = 800
         height, width = image_rgb.shape[:2]
         if max(height, width) > max_dimension:
@@ -494,7 +528,16 @@ async def process_image(
     file: UploadFile = File(...),
     steps: int = Query(..., description="Número de clusters para K-means", ge=2, le=100)
 ):
-    """Endpoint unificado para subir y procesar imagen"""
+    """
+    Endpoint para procesar una imagen usando K-means
+    
+    Args:
+        file: Archivo de imagen a procesar
+        steps: Número de clusters a usar
+        
+    Returns:
+        dict: Resultado del procesamiento con las imágenes generadas
+    """
     try:
         contents = await file.read()
         if not contents:

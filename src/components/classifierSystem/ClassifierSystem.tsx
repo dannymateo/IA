@@ -60,9 +60,9 @@ interface PredictionResponse {
 }
 
 /**
- * @function ClassifierSystem
- * @description Componente principal del sistema de clasificación
- * @returns {JSX.Element} Interfaz del sistema de clasificación
+ * @component ClassifierSystem
+ * @description Componente principal del sistema de clasificación que utiliza múltiples modelos
+ * de machine learning para predecir la posibilidad de diabetes basado en respuestas del usuario.
  */
 export function ClassifierSystem() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -76,17 +76,13 @@ export function ClassifierSystem() {
 
   /**
    * @function handleFileUpload
-   * @description Maneja la carga de archivos CSV o Excel
-   * @param {File} file - Archivo a procesar
-   * @returns {Promise<void>}
-   * @throws {Error} Si hay un error en la carga o procesamiento del archivo
+   * @description Maneja la carga inicial del archivo y obtiene los parámetros a analizar
    */
   const handleFileUpload = async (file: File) => {
     setIsLoading(true);
     setError("");
     setPrediction("");
     
-    // Validar el tipo de archivo
     const validTypes = [
       "text/csv",
       "application/vnd.ms-excel",
@@ -139,9 +135,7 @@ export function ClassifierSystem() {
 
   /**
    * @function handleSubmit
-   * @description Envía las respuestas al servidor y obtiene predicciones
-   * @returns {Promise<void>}
-   * @throws {Error} Si hay un error en el proceso de predicción
+   * @description Envía las respuestas junto con el archivo para obtener las predicciones
    */
   const handleSubmit = async () => {
     if (!selectedFile) {
@@ -183,8 +177,7 @@ export function ClassifierSystem() {
 
   /**
    * @function handleDragOver
-   * @description Maneja el evento de arrastrar sobre la zona de carga
-   * @param {React.DragEvent<HTMLDivElement>} e - Evento de arrastre
+   * @description Previene el comportamiento por defecto del evento drag
    */
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -193,8 +186,7 @@ export function ClassifierSystem() {
 
   /**
    * @function handleDrop
-   * @description Procesa el archivo soltado en la zona de carga
-   * @param {React.DragEvent<HTMLDivElement>} e - Evento de soltar
+   * @description Maneja el evento de soltar archivos en la zona de carga
    */
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();

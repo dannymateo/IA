@@ -2,20 +2,13 @@
 
 import { Button, CardHeader, Spinner } from "@nextui-org/react";
 import { Card, CardBody } from "@nextui-org/react";
-import { useCallback, useEffect } from "react";
-import { useState } from "react";
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Layers, RotateCw } from "lucide-react";
 
 import { VideoResult } from "./VideoResult";
 import { ResultsGrid } from "./ResultsGrid";
 import { FileUpload } from "@/components/fileUpload";
 import { StepsControl } from "./StepsControl";
-
-/**
- * @interface ProcessvideoProps
- * @description Propiedades del componente Processvideo (actualmente vacío ya que no recibe props)
- */
 
 /**
  * @component Processvideo
@@ -28,43 +21,42 @@ import { StepsControl } from "./StepsControl";
  * ```
  */
 export function Processvideo() {
+    // Estados para manejar la imagen y el procesamiento
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [processedImages, setProcessedImages] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string>("");
-    const canvasRef = useRef<HTMLCanvasElement>(null);
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
     const [stepsCount, setStepsCount] = useState(11);
-    const [imageToProcess, setImageToProcess] = useState<string | null>(null);
-    const [sessionId, setSessionId] = useState<string | null>(null);
     const [isComplete, setIsComplete] = useState(false);
-    const API_BASE_URL = 'https://dasscoin.zapto.org';
-    const [originalFile, setOriginalFile] = useState<File | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [retryCount, setRetryCount] = useState(0);
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 2000;
     const [isProcessing, setIsProcessing] = useState(false);
-  
+    
+    // Referencias y configuración
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [originalFile, setOriginalFile] = useState<File | null>(null);
+    
+    const API_BASE_URL = 'https://dasscoin.zapto.org';
+
     /**
      * @function handleFileUpload
      * @description Maneja la carga de archivos, procesa la imagen y configura el ID de sesión
      * @param {File} file - Archivo de imagen a procesar
      */
     const handleFileUpload = async (file: File) => {
-      setError("");
-      setOriginalFile(file);
-      setProcessedImages([]);
-      setIsComplete(false);
-      
-      if (videoUrl) {
-        URL.revokeObjectURL(videoUrl);
-        setVideoUrl(null);
-      }
+        setError("");
+        setOriginalFile(file);
+        setProcessedImages([]);
+        setIsComplete(false);
+        
+        if (videoUrl) {
+            URL.revokeObjectURL(videoUrl);
+            setVideoUrl(null);
+        }
 
-      const imageUrl = await readFileAsDataURL(file);
-      setSelectedImage(imageUrl);
-      await processImage(file);
+        const imageUrl = await readFileAsDataURL(file);
+        setSelectedImage(imageUrl);
+        await processImage(file);
     };
   
     /**
@@ -257,17 +249,6 @@ export function Processvideo() {
       }
     };
   
-    // Limpiar sesión al desmontar el componente
-    useEffect(() => {
-        return () => {
-            if (sessionId) {
-                fetch(`${API_BASE_URL}/cleanup-session/${sessionId}`, {
-                    method: 'POST'
-                }).catch(console.error);
-            }
-        };
-    }, [sessionId]);
-  
     return (
       <div className="min-h-screen w-full bg-[#fafafa]">
         <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -331,7 +312,7 @@ export function Processvideo() {
               </div>
 
               {/* Botón de procesamiento */}
-              {imageToProcess && !isComplete && (
+              {selectedImage && !isComplete && (
                 <div className="flex justify-center mt-4 max-w-xl mx-auto">
                   <Button
                     size="lg"
