@@ -43,7 +43,8 @@ export function Processvideo() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [retryCount, setRetryCount] = useState(0);
     const MAX_RETRIES = 3;
-    const RETRY_DELAY = 1000;
+    const RETRY_DELAY = 2000;
+    const [isProcessing, setIsProcessing] = useState(false);
   
     /**
      * @function handleFileUpload
@@ -225,77 +226,63 @@ export function Processvideo() {
      */
     const processImage = async (imageUrl: string) => {
       if (!sessionId) {
-        setError('Por favor, vuelva a subir la imagen para procesarla.');
+        setError('Por favor, vuelva a subir la imagen');
         return;
       }
 
       setIsLoading(true);
-      setProcessedImages([]);
-      setIsComplete(false);
-      setRetryCount(0);
+      setIsProcessing(true);
+      setError("");
 
-      let currentRetry = 0;
-
-      while (currentRetry < MAX_RETRIES) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            }
-          });
-
-          if (response.status === 404 || response.status === 410) {
-            if (originalFile && currentRetry < MAX_RETRIES - 1) {
-              console.log(`Reintentando carga de imagen (${currentRetry + 1}/${MAX_RETRIES})`);
-              await handleFileUpload(originalFile);
-              currentRetry++;
-              setRetryCount(currentRetry);
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-              continue;
-            }
+      try {
+        const response = await fetch(`${API_BASE_URL}/process-image/${sessionId}?steps=${stepsCount}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           }
+        });
 
-          if (response.status === 409) {
-            console.log(`Sesión ocupada, reintentando (${currentRetry + 1}/${MAX_RETRIES})`);
-            currentRetry++;
-            setRetryCount(currentRetry);
+        // Si la sesión expiró, intentar recargar la imagen
+        if (response.status === 404) {
+          if (originalFile) {
+            await handleFileUpload(originalFile);
+            // Esperar un momento y reintentar
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            continue;
+            await processImage(imageUrl);
+            return;
+          } else {
+            throw new Error('Sesión expirada. Por favor, vuelva a cargar la imagen');
           }
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Error al procesar la imagen');
-          }
-
-          const responseData = await response.json();
-          
-          if (!responseData.images || responseData.images.length === 0) {
-            throw new Error('No se obtuvieron resultados del procesamiento');
-          }
-
-          setProcessedImages(responseData.images);
-          await createVideo(responseData.images);
-          setIsComplete(true);
-          break;
-
-        } catch (error) {
-          currentRetry++;
-          setRetryCount(currentRetry);
-          
-          if (currentRetry >= MAX_RETRIES) {
-            console.error('Error en el procesamiento:', error);
-            setError(error instanceof Error ? error.message : 'Error al procesar la imagen');
-            break;
-          }
-
-          console.log(`Reintentando después de error (${currentRetry}/${MAX_RETRIES})`);
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         }
-      }
 
-      setIsLoading(false);
+        // Si la imagen está siendo procesada, esperar y reintentar
+        if (response.status === 409) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          await processImage(imageUrl);
+          return;
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Error al procesar la imagen');
+        }
+
+        const data = await response.json();
+        if (!data.images || data.images.length === 0) {
+          throw new Error('No se obtuvieron resultados');
+        }
+
+        setProcessedImages(data.images);
+        await createVideo(data.images);
+        setIsComplete(true);
+
+      } catch (error) {
+        console.error('Error:', error);
+        setError(error instanceof Error ? error.message : 'Error al procesar la imagen');
+      } finally {
+        setIsLoading(false);
+        setIsProcessing(false);
+      }
     };
   
     /**
@@ -444,7 +431,7 @@ export function Processvideo() {
                 <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-4 py-8">
                   <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
                   <p className="text-sm text-slate-600 text-center">
-                    {retryCount > 0 ? `Reintentando proceso... (Intento ${retryCount}/${MAX_RETRIES})` : 'Procesando imagen...'}
+                    {isProcessing ? 'Procesando imagen...' : 'Cargando...'}
                   </p>
                 </div>
               )}
