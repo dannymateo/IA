@@ -36,7 +36,7 @@ export function Processvideo() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [originalFile, setOriginalFile] = useState<File | null>(null);
     
-    const API_BASE_URL = 'https://dasscoin.zapto.org';
+    const API_BASE_URL = 'https://191.91.240.39';
 
     /**
      * @function handleFileUpload

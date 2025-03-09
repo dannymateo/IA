@@ -25,7 +25,7 @@ export function ExpertSystem() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const API_BASE_URL = 'https://dasscoin.zapto.org';
+    const API_BASE_URL = 'https://191.91.240.39';
     
     /**
      * @function handleFileUpload
@@ -143,7 +143,7 @@ export function ExpertSystem() {
      */
     const handleDownloadTemplate = () => {
       // Actualizar la URL al archivo de plantilla en el servidor
-      const templateUrl = 'https://dasscoin.zapto.org/files/expertSystem.xlsx';
+      const templateUrl = 'https://191.91.240.39/files/expertSystem.xlsx';
       
       // Crear un elemento <a> temporal
       const link = document.createElement('a');

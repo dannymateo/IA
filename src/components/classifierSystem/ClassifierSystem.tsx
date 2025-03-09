@@ -72,7 +72,7 @@ export function ClassifierSystem() {
   const [isLoading, setIsLoading] = useState(false);
   const [modelPredictions, setModelPredictions] = useState<ModelPredictions | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const API_BASE_URL = 'https://dasscoin.zapto.org';
+  const API_BASE_URL = 'https://191.91.240.39';
 
   /**
    * @function handleFileUpload
@@ -205,7 +205,7 @@ export function ClassifierSystem() {
    */
   const handleDownloadTemplate = () => {
     // Actualizar la URL al archivo de plantilla en el servidor
-    const templateUrl = 'https://dasscoin.zapto.org/files/classifierSystem.csv';
+    const templateUrl = 'https://191.91.240.39/files/classifierSystem.csv';
     
     // Crear un elemento <a> temporal
     const link = document.createElement('a');
